@@ -146,6 +146,12 @@ def execute_production_pipeline(
     timings["generate_script"] = round(time.time() - start, 4)
     print(f"✔️ Script generated: '{script.title}'")
 
+    # [STAGE 4B] Script Critic Evaluation & Revision
+    start_critic = time.time()
+    from clippilot.brain.script_critic import orchestrate_script_revision
+    script = orchestrate_script_revision(state, topic, variation, workspace_dir, script, threshold=8.5)
+    timings["script_critic"] = round(time.time() - start_critic, 4)
+
     print("\n🚀 [STAGE 5] Initial Scene Planning...")
     start = time.time()
     scene_plan = plan_scenes(script, variation)
@@ -373,6 +379,74 @@ def execute_production_pipeline(
     print(f"VIDEO FILE PATH: {report['output_paths']['final_video']}")
     print(f"PUBLISH URL    : {report['upload_result']['url']}")
     print("=========================================\n")
+
+    # Record execution performance metrics
+    try:
+        import uuid
+        import datetime
+        from clippilot.brain.performance_store import PerformanceStore, _get_git_commit
+        from clippilot.brain.analytics_models import VideoPerformance, GenerationMetrics, UploadMetrics, AnalyticsMetrics
+
+        store_path = workspace_dir / "ClipPilot" / "performance_history.jsonl"
+        store = PerformanceStore(store_path)
+
+        video_id = f"{slug}_{uuid.uuid4().hex[:8]}"
+        git_hash = _get_git_commit(workspace_dir)
+
+        gen_metrics = GenerationMetrics(
+            llm_provider=report["providers"]["llm"],
+            llm_model=settings.llm_model or "claude-opus-4-8",
+            script_critic_score=script.metadata.get("final_score", 0.0),
+            vision_qa_score=float(qa_res.score),
+            render_time_seconds=timings.get("execute_remotion", 0.0),
+            total_cost_usd=total_cost,
+            script_metadata=script.metadata,
+            stage_timings=timings,
+        )
+
+        file_size = output_mp4.stat().st_size if output_mp4.exists() else 0
+        upload_metrics = UploadMetrics(
+            platform="youtube",
+            upload_success=pub_res.success,
+            video_url=pub_res.url,
+            video_id_on_platform=pub_res.video_id,
+            duration_seconds=total_duration,
+            resolution_width=1080,
+            resolution_height=1920,
+            fps=30,
+            file_size_bytes=file_size,
+            output_path=str(output_mp4),
+        )
+
+        perf_record = VideoPerformance(
+            video_id=video_id,
+            timestamp=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            topic={
+                "num": topic.num,
+                "title": topic.title,
+                "niche": topic.niche,
+                "angle": topic.angle,
+                "guardrail": topic.guardrail,
+            },
+            variation={
+                "title": variation.title,
+                "fmt": variation.fmt,
+                "voice": variation.voice,
+                "skin": variation.skin,
+                "hook": variation.hook,
+                "cluster": variation.cluster,
+            },
+            generation_metrics=gen_metrics,
+            upload_metrics=upload_metrics,
+            analytics_metrics=AnalyticsMetrics(),
+            schema_version=1,
+            pipeline_version="1.0.0",
+            git_commit=git_hash,
+        )
+        store.save_record(perf_record)
+        print(f"✔️ Performance metrics recorded to '{store_path}' (Video ID: {video_id})")
+    except Exception as e:
+        print(f"⚠️ Warning: Failed to record performance metrics: {e}")
 
     return report
 
