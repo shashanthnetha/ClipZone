@@ -71,7 +71,7 @@ def plan_scenes(script: Script, variation: VariationRecord) -> ScenePlan:
 
     anim_map = {
         "S1": ["spring", "counter_roll"],
-        "S2": ["draw_path", "reveal_wipe"],
+        "S2": ["draw_path", "bounce"],
         "S3": ["bounce", "overshoot"],
         "S4": ["counter_roll", "glow_pulse"],
         "S5": ["snappy_drop", "paper_flip"],

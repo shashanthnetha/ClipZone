@@ -1,0 +1,40 @@
+{
+  "records_analyzed": 0,
+  "overall_insights": {
+    "avg_ctr": 0.0,
+    "avg_retention": 0.0,
+    "avg_watch_time": 0.0,
+    "avg_critic_score": 0.0,
+    "avg_vision_qa_score": 0.0
+  },
+  "best_hook": "unknown",
+  "best_voice": "unknown",
+  "best_skin": "unknown",
+  "best_format": "unknown",
+  "best_niche": "unknown",
+  "fastest_render_config": {},
+  "correlations": {
+    "critic_score_vs_retention": 0.0,
+    "vision_qa_vs_ctr": 0.0,
+    "duration_vs_retention": 0.0,
+    "hook_vs_ctr": 0.0,
+    "voice_vs_watch_time": 0.0,
+    "skin_vs_retention": 0.0
+  },
+  "top_hooks": [],
+  "top_voices": [],
+  "top_skins": [],
+  "top_formats": [],
+  "top_topics": [],
+  "top_niches": [],
+  "recommendations": {
+    "preferred_hook": "",
+    "preferred_voice": "",
+    "preferred_skin": "",
+    "preferred_format": "",
+    "preferred_topic": "",
+    "preferred_niche": "",
+    "confidence_score": 0.0,
+    "notes": ""
+  }
+}

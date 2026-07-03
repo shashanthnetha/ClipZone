@@ -107,6 +107,32 @@ class Settings:
     llm_base_url: str = ""
     llm_api_key: str = ""
 
+    # ── Asset Provider Configuration ──
+    pexels_api_key: str = ""
+    pixabay_api_key: str = ""
+    unsplash_api_key: str = ""
+    asset_provider_priority: list[str] = field(default_factory=lambda: ["pexels", "pixabay", "unsplash"])
+
+    # ── persistence ──
+    # ── validation and overrides ──
+    def validate(self) -> None:
+        """Validate settings fields and raise ValueError with helpful messages if invalid."""
+        if not isinstance(self.max_attempts, int) or self.max_attempts < 1:
+            raise ValueError(f"max_attempts must be an integer >= 1, got {self.max_attempts}")
+        
+        if self.default_section not in ("A", "B", "C"):
+            raise ValueError(f"default_section must be 'A', 'B', or 'C', got '{self.default_section}'")
+            
+        if not isinstance(self.brain_frame_budget_per_min, int) or self.brain_frame_budget_per_min < 1:
+            raise ValueError(f"brain_frame_budget_per_min must be an integer >= 1, got {self.brain_frame_budget_per_min}")
+            
+        if not (0.0 <= self.bgm_volume <= 1.0):
+            raise ValueError(f"bgm_volume must be between 0.0 and 1.0 inclusive, got {self.bgm_volume}")
+            
+        valid_providers = ("anthropic", "openai", "openrouter")
+        if self.llm_provider not in valid_providers:
+            raise ValueError(f"llm_provider must be one of {valid_providers}, got '{self.llm_provider}'")
+
     # ── persistence ──
     def to_dict(self) -> dict:
         return asdict(self)
@@ -120,9 +146,15 @@ class Settings:
             raw_g = {}
         allowed = set(Guardrails.__dataclass_fields__)
         g = Guardrails(**{k: v for k, v in raw_g.items() if k in allowed})
+        priority = d.get("asset_provider_priority")
+        if isinstance(priority, str):
+            priority = [x.strip() for x in priority.split(",") if x.strip()]
+        elif not isinstance(priority, list):
+            priority = ["pexels", "pixabay", "unsplash"]
+
         return cls(
             auto_approve=bool(d.get("auto_approve", False)),
-            max_attempts=int(d.get("max_attempts", 3)),
+            max_attempts=int(d.get("max_attempts", d.get("max_attempts", 3))),
             default_section=str(d.get("default_section", "A")),
             brain_model=str(d.get("brain_model", "claude-opus-4-8")),
             brain_frame_budget_per_min=int(d.get("brain_frame_budget_per_min", 6)),
@@ -135,6 +167,10 @@ class Settings:
             llm_model=str(d.get("llm_model", d.get("brain_model", "claude-opus-4-8"))),
             llm_base_url=str(d.get("llm_base_url", "")),
             llm_api_key=str(d.get("llm_api_key", "")),
+            pexels_api_key=str(d.get("pexels_api_key", "")),
+            pixabay_api_key=str(d.get("pixabay_api_key", "")),
+            unsplash_api_key=str(d.get("unsplash_api_key", "")),
+            asset_provider_priority=priority,
         )
 
     def save(self, path: Path | None = None) -> None:
@@ -145,9 +181,65 @@ class Settings:
     @classmethod
     def load(cls, path: Path | None = None) -> "Settings":
         path = path or SETTINGS_PATH
+        d = {}
         if path.exists():
             try:
-                return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
+                d = json.loads(path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
-        return cls()
+        
+        # Instantiate
+        settings = cls.from_dict(d)
+        
+        # Apply environment variable overrides
+        from .brain import env as benv
+        benv.load_dotenv()
+        
+        # Map secrets from provider-specific variables if not already set in settings.json
+        if not settings.llm_api_key:
+            if settings.llm_provider == "anthropic":
+                settings.llm_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            elif settings.llm_provider == "openai":
+                settings.llm_api_key = os.environ.get("OPENAI_API_KEY", "")
+            elif settings.llm_provider == "openrouter":
+                settings.llm_api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not settings.pexels_api_key:
+            settings.pexels_api_key = os.environ.get("PEXELS_API_KEY", "")
+        if not settings.pixabay_api_key:
+            settings.pixabay_api_key = os.environ.get("PIXABAY_API_KEY", "")
+        if not settings.unsplash_api_key:
+            settings.unsplash_api_key = os.environ.get("UNSPLASH_API_KEY", "") or os.environ.get("UNSPLASH_ACCESS_KEY", "")
+        
+        # Standard field overrides
+        for field_name in cls.__dataclass_fields__:
+            if field_name == "guardrails":
+                continue
+            
+            # Check env keys: e.g. CLIPPILOT_LLM_PROVIDER, LLM_PROVIDER
+            env_keys = [f"CLIPPILOT_{field_name.upper()}", field_name.upper()]
+            for env_key in env_keys:
+                env_val = os.environ.get(env_key)
+                if env_val is not None:
+                    # Cast value to correct type based on default/type
+                    field_type = cls.__dataclass_fields__[field_name].type
+                    if field_type is bool or field_type == "bool":
+                        setattr(settings, field_name, env_val.lower() in ("true", "yes", "1"))
+                    elif field_type is int or field_type == "int":
+                        setattr(settings, field_name, int(env_val))
+                    elif field_type is float or field_type == "float":
+                        setattr(settings, field_name, float(env_val))
+                    elif field_name == "asset_provider_priority":
+                        setattr(settings, field_name, [x.strip() for x in env_val.split(",") if x.strip()])
+                    else:
+                        setattr(settings, field_name, env_val)
+                    break
+        
+        # Override llm_api_key specifically if LLM_API_KEY is present
+        api_key_override = os.environ.get("CLIPPILOT_LLM_API_KEY") or os.environ.get("LLM_API_KEY")
+        if api_key_override:
+            settings.llm_api_key = api_key_override
+            
+        # Validate the final merged settings
+        settings.validate()
+        
+        return settings

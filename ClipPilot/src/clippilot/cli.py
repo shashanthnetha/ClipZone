@@ -210,16 +210,177 @@ def cmd_publish_reel(a: argparse.Namespace) -> int:
 
 
 def cmd_run(a: argparse.Namespace) -> int:
-    q = _queue()
-    eng = Engine(q)
-    steps = eng.drain(max_steps=a.max)
-    print(f"Engine ran {steps} step(s). Status counts: {q.counts()}")
-    blocked = q.list(JobStatus.BLOCKED_APPROVAL)
-    if blocked:
-        print(f"  {len(blocked)} job(s) awaiting approval: {[j.id for j in blocked]}")
-    attn = q.list(JobStatus.NEEDS_ATTENTION)
-    if attn:
-        print(f"  {len(attn)} job(s) need attention: {[j.id for j in attn]}")
+    if getattr(a, "legacy", False):
+        q = _queue()
+        eng = Engine(q)
+        steps = eng.drain(max_steps=a.max)
+        print(f"Engine ran {steps} step(s). Status counts: {q.counts()}")
+        blocked = q.list(JobStatus.BLOCKED_APPROVAL)
+        if blocked:
+            print(f"  {len(blocked)} job(s) awaiting approval: {[j.id for j in blocked]}")
+        attn = q.list(JobStatus.NEEDS_ATTENTION)
+        if attn:
+            print(f"  {len(attn)} job(s) need attention: {[j.id for j in attn]}")
+        return 0
+
+    from clippilot.brain.pipeline_demo import execute_production_pipeline
+    from pathlib import Path
+    print("Running end-to-end production pipeline...")
+    report = execute_production_pipeline(
+        workspace_dir=Path(a.workspace),
+        variation_dir=Path(a.variation),
+        date_str=a.date,
+        slug=a.slug,
+    )
+    if report.get("success"):
+        print("✔️ Pipeline completed successfully.")
+        return 0
+    else:
+        print(f"❌ Pipeline failed: {report.get('error')}")
+        return 1
+
+
+def cmd_render(a: argparse.Namespace) -> int:
+    from clippilot.brain.pipeline_demo import execute_production_pipeline
+    from pathlib import Path
+    print("Compiling and rendering Remotion video...")
+    report = execute_production_pipeline(
+        workspace_dir=Path(a.workspace),
+        variation_dir=Path(a.variation),
+        date_str=a.date,
+        slug=a.slug,
+        skip_qa_publish=True,
+    )
+    if report.get("success"):
+        print("✔️ Video rendering completed successfully.")
+        return 0
+    else:
+        print(f"❌ Video rendering failed: {report.get('error')}")
+        return 1
+
+
+def cmd_learn(a: argparse.Namespace) -> int:
+    from clippilot.brain.performance_store import PerformanceStore
+    from clippilot.brain.learning_engine import LearningEngine
+    from pathlib import Path
+    store_path = Path(a.workspace) / "ClipPilot" / "performance_history.jsonl"
+    store = PerformanceStore(store_path)
+    le = LearningEngine(store)
+    summary_path = le.save_summary()
+    print(f"✔️ Learning Engine run complete. Summary saved to {summary_path}")
+    return 0
+
+
+def cmd_analytics(a: argparse.Namespace) -> int:
+    from clippilot.brain.performance_store import PerformanceStore
+    from clippilot.brain.youtube_analytics import YouTubeAnalyticsProvider
+    from clippilot.brain.analytics_models import AnalyticsMetrics
+    from pathlib import Path
+    store_path = Path(a.workspace) / "ClipPilot" / "performance_history.jsonl"
+    store = PerformanceStore(store_path)
+    provider = YouTubeAnalyticsProvider()
+    records = store.load_records()
+    synced = 0
+    for r in records:
+        yt_id = r.upload_metrics.video_id_on_platform
+        if yt_id and yt_id != "dry_run_yt_123":
+            try:
+                stats = provider.get_video_statistics(yt_id)
+                metrics = AnalyticsMetrics(
+                    views=stats.get("views", 0),
+                    likes=stats.get("likes", 0),
+                    comments=stats.get("comments", 0),
+                    impressions=stats.get("impressions", 0),
+                    ctr=stats.get("ctr", 0.0),
+                    avg_view_duration_seconds=stats.get("average_view_duration_seconds", 0.0),
+                    avg_percentage_viewed=stats.get("average_percentage_viewed", 0.0),
+                    watch_time_hours=stats.get("watch_time_hours", 0.0),
+                    subscribers_gained=stats.get("subscribers_gained", 0),
+                    revenue_usd=stats.get("estimated_revenue_usd", 0.0),
+                )
+                store.update_analytics(r.video_id, metrics)
+                print(f"Synced video {r.video_id} (YouTube ID: {yt_id})")
+                synced += 1
+            except Exception as e:
+                print(f"⚠️ Failed to sync {r.video_id}: {e}")
+    print(f"✔️ Analytics sync complete. Total synced: {synced}")
+    return 0
+
+
+def cmd_strategy(a: argparse.Namespace) -> int:
+    from clippilot.brain.performance_store import PerformanceStore
+    from clippilot.brain.learning_engine import LearningEngine
+    from clippilot.brain.strategy_engine import StrategyEngine
+    from clippilot.brain.pipeline_orchestrator import RunContext, load_state
+    from pathlib import Path
+    store_path = Path(a.workspace) / "ClipPilot" / "performance_history.jsonl"
+    store = PerformanceStore(store_path)
+    le = LearningEngine(store)
+    se = StrategyEngine(store, le)
+    run_ctx = RunContext(workspace_dir=Path(a.workspace), variation_dir=Path(a.variation), date_str=a.date, slug=a.slug)
+    state = load_state(run_ctx)
+    decision = se.make_decision(state, Path(a.variation))
+    print("\n🎯 Next Strategy Decision:")
+    print(f"Topic:      {decision.topic.num} - {decision.topic.title}")
+    print(f"Hook:       {decision.hook}")
+    print(f"Voice:      {decision.voice}")
+    print(f"Skin:       {decision.skin}")
+    print(f"Format:     {decision.format}")
+    print(f"Confidence: {decision.confidence:.2f}")
+    print(f"Reasoning:  {decision.reasoning}")
+    return 0
+
+
+def cmd_history(a: argparse.Namespace) -> int:
+    from clippilot.brain.performance_store import PerformanceStore
+    from pathlib import Path
+    store_path = Path(a.workspace) / "ClipPilot" / "performance_history.jsonl"
+    store = PerformanceStore(store_path)
+    records = store.load_records()
+    if not records:
+        print("No performance records found.")
+        return 0
+    print(f"\nRecorded History ({len(records)} videos):")
+    for r in records:
+        print(f"- [{r.timestamp}] {r.video_id}: Topic {r.topic.get('num', '???')} - '{r.topic.get('title', '???')}'")
+        print(f"  Variation: hook={r.variation.get('hook')} voice={r.variation.get('voice')} skin={r.variation.get('skin')} format={r.variation.get('fmt')}")
+        if r.strategy_metadata:
+            print(f"  Strategy: final_ucb={r.strategy_metadata.get('final_ucb_score')}")
+    return 0
+
+
+def cmd_config(a: argparse.Namespace) -> int:
+    from clippilot.config import Settings
+    settings = Settings.load()
+    if a.action == "list":
+        print("\nConfiguration Settings:")
+        for k, v in settings.to_dict().items():
+            print(f"  {k}: {v}")
+    elif a.action == "get":
+        if not a.key:
+            print("Error: --key is required for get action", file=sys.stderr)
+            return 1
+        val = getattr(settings, a.key, None)
+        if val is None:
+            print(f"Error: key '{a.key}' not found", file=sys.stderr)
+            return 1
+        print(f"{a.key}: {val}")
+    elif a.action == "set":
+        if not a.key or a.value is None:
+            print("Error: --key and --value are required for set action", file=sys.stderr)
+            return 1
+        orig = getattr(settings, a.key, None)
+        val = a.value
+        if orig is not None:
+            if isinstance(orig, bool):
+                val = val.lower() in ("true", "yes", "1")
+            elif isinstance(orig, int):
+                val = int(val)
+            elif isinstance(orig, float):
+                val = float(val)
+        setattr(settings, a.key, val)
+        settings.save()
+        print(f"✔️ Set '{a.key}' to '{val}'. Saved config.")
     return 0
 
 
@@ -452,9 +613,46 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--seconds", type=float, default=5.0)
     ex.set_defaults(func=cmd_explainer)
 
-    r = sub.add_parser("run", help="drain the engine")
-    r.add_argument("--max", type=int, default=1000)
+    r = sub.add_parser("run", help="run the production pipeline or legacy queue engine")
+    r.add_argument("--legacy", action="store_true", help="run legacy queue drain mode")
+    r.add_argument("--max", type=int, default=1000, help="max steps to drain in legacy mode")
+    r.add_argument("--workspace", default=".", help="workspace directory path")
+    r.add_argument("--variation", default="variation", help="variation directory path")
+    r.add_argument("--date", default="2026-07-03", help="date string for the run")
+    r.add_argument("--slug", default="daily_006", help="default slug prefix")
     r.set_defaults(func=cmd_run)
+
+    rnd = sub.add_parser("render", help="compile and render the Remotion video composition only")
+    rnd.add_argument("--workspace", default=".", help="workspace directory path")
+    rnd.add_argument("--variation", default="variation", help="variation directory path")
+    rnd.add_argument("--date", default="2026-07-03", help="date string for the run")
+    rnd.add_argument("--slug", default="daily_006", help="default slug prefix")
+    rnd.set_defaults(func=cmd_render)
+
+    lrn = sub.add_parser("learn", help="run the Learning Engine to generate performance analysis summary")
+    lrn.add_argument("--workspace", default=".", help="workspace directory path")
+    lrn.set_defaults(func=cmd_learn)
+
+    anl = sub.add_parser("analytics", help="import YouTube performance analytics and update records")
+    anl.add_argument("--workspace", default=".", help="workspace directory path")
+    anl.set_defaults(func=cmd_analytics)
+
+    strg = sub.add_parser("strategy", help="output the next Strategy Engine decision configuration")
+    strg.add_argument("--workspace", default=".", help="workspace directory path")
+    strg.add_argument("--variation", default="variation", help="variation directory path")
+    strg.add_argument("--date", default="2026-07-03", help="date string for the run")
+    strg.add_argument("--slug", default="daily_006", help="default slug prefix")
+    strg.set_defaults(func=cmd_strategy)
+
+    hist = sub.add_parser("history", help="display recorded video performance history logs")
+    hist.add_argument("--workspace", default=".", help="workspace directory path")
+    hist.set_defaults(func=cmd_history)
+
+    cfg_cmd = sub.add_parser("config", help="view and update engine settings configuration")
+    cfg_cmd.add_argument("action", choices=["list", "get", "set"], help="config action to perform")
+    cfg_cmd.add_argument("--key", default=None, help="settings key name")
+    cfg_cmd.add_argument("--value", default=None, help="value to set the key to")
+    cfg_cmd.set_defaults(func=cmd_config)
 
     ls = sub.add_parser("list", help="list jobs")
     ls.add_argument("--status", default=None, choices=[s.value for s in JobStatus])

@@ -18,6 +18,18 @@ from clippilot.brain.pipeline_orchestrator import PipelineState, Topic, Variatio
 from clippilot.brain.provider import get_provider
 from clippilot.brain.script_generator import Script, ScriptScene, _validate_and_parse_json, ScriptValidationError
 from clippilot.config import Settings
+from clippilot.logger import get_logger
+
+logger = get_logger("clippilot.critic")
+
+def print(*args, **kwargs):
+    msg = " ".join(str(a) for a in args)
+    if "⚠️" in msg:
+        logger.warning(msg)
+    elif "❌" in msg or "FAIL" in msg or "failed" in msg.lower():
+        logger.error(msg)
+    else:
+        logger.info(msg)
 
 
 @dataclass

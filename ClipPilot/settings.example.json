@@ -1,0 +1,15 @@
+{
+  "auto_approve": false,
+  "max_attempts": 3,
+  "default_section": "A",
+  "brain_model": "claude-opus-4-8",
+  "brain_frame_budget_per_min": 6,
+  "compose_concat": false,
+  "bgm_path": "",
+  "bgm_volume": 0.12,
+  "caption_skin": "karaoke_yellow",
+  "llm_provider": "anthropic",
+  "llm_model": "claude-opus-4-8",
+  "llm_base_url": "",
+  "llm_api_key": ""
+}

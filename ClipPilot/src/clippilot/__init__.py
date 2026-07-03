@@ -7,5 +7,5 @@ whole orchestration loop end-to-end before any heavy media/ML/GUI dependency
 exists. See ../docs/ for the plan; 06-decisions-and-product.md for the why.
 """
 
-__version__ = "0.0.1"
+__version__ = "1.0.0"
 __all__ = ["__version__"]

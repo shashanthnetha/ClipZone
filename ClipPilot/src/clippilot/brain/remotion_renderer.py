@@ -147,13 +147,31 @@ def render_to_remotion(tree: SceneComponentTree) -> RemotionRenderOutput:
                 )
             elif isinstance(child, ImageComponent):
                 img_path = child.source_path
-                if not (public_dir / img_path).exists():
+                mp4_path = img_path.rsplit(".", 1)[0] + ".mp4"
+                svg_path = img_path.rsplit(".", 1)[0] + ".svg"
+                
+                if (public_dir / mp4_path).exists():
+                    scene_lines.append(
+                        f"      <Video src={{staticFile('{mp4_path}')}} style={layout_str} "
+                        f"animations={{{anim_str}}} transitions={{{trans_str}}} />"
+                    )
+                elif (public_dir / svg_path).exists():
+                    scene_lines.append(
+                        f"      <Image src={{staticFile('{svg_path}')}} style={layout_str} "
+                        f"animations={{{anim_str}}} transitions={{{trans_str}}} />"
+                    )
+                elif (public_dir / img_path).exists():
+                    scene_lines.append(
+                        f"      <Image src={{staticFile('{img_path}')}} style={layout_str} "
+                        f"animations={{{anim_str}}} transitions={{{trans_str}}} />"
+                    )
+                else:
                     print(f"⚠️ Warning: Missing image asset '{img_path}'. Falling back to 'default_icon.png'")
-                    img_path = "default_icon.png"
-                scene_lines.append(
-                    f"      <Image src={{staticFile('{img_path}')}} style={layout_str} "
-                    f"animations={{{anim_str}}} transitions={{{trans_str}}} />"
-                )
+                    fallback = "default_icon.png"
+                    scene_lines.append(
+                        f"      <Image src={{staticFile('{fallback}')}} style={layout_str} "
+                        f"animations={{{anim_str}}} transitions={{{trans_str}}} />"
+                    )
             elif isinstance(child, VideoComponent):
                 video_path = child.source_path
                 if not (public_dir / video_path).exists():

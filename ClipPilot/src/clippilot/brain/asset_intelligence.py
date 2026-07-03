@@ -14,6 +14,18 @@ from clippilot.brain.script_generator import Script
 from clippilot.brain.asset_models import VideoAssetPlan, SceneAssetPlan, AssetReference
 from clippilot.config import Settings
 from clippilot.brain.provider import get_provider
+from clippilot.logger import get_logger
+
+logger = get_logger("clippilot.assets")
+
+def print(*args, **kwargs):
+    msg = " ".join(str(a) for a in args)
+    if "⚠️" in msg:
+        logger.warning(msg)
+    elif "❌" in msg or "FAIL" in msg or "failed" in msg.lower():
+        logger.error(msg)
+    else:
+        logger.info(msg)
 
 
 class AssetIntelligenceEngine:

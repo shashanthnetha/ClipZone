@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clippilot"
+version = "1.0.0"
+description = "A production-grade autonomous YouTube shorts creation and rendering pipeline."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Sha", email = "shashanthnetha@gmail.com"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "imageio-ffmpeg>=0.5",
+    "anthropic>=0.111",
+    "faster-whisper>=1.0",
+    "PySide6-Essentials>=6.11",
+    "yt-dlp>=2025.1",
+]
+
+[project.scripts]
+clippilot = "clippilot.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["clippilot*"]
