@@ -101,6 +101,12 @@ class Settings:
     caption_skin: str = "karaoke_yellow"  # default caption look (edit.CAPTION_SKINS; docs/10)
     guardrails: Guardrails = field(default_factory=Guardrails)
 
+    # ── LLM Provider Configuration ──
+    llm_provider: str = "anthropic"
+    llm_model: str = "claude-opus-4-8"
+    llm_base_url: str = ""
+    llm_api_key: str = ""
+
     # ── persistence ──
     def to_dict(self) -> dict:
         return asdict(self)
@@ -125,6 +131,10 @@ class Settings:
             bgm_volume=float(d.get("bgm_volume", 0.12)),
             caption_skin=str(d.get("caption_skin", "karaoke_yellow")),
             guardrails=g,
+            llm_provider=str(d.get("llm_provider", "anthropic")),
+            llm_model=str(d.get("llm_model", d.get("brain_model", "claude-opus-4-8"))),
+            llm_base_url=str(d.get("llm_base_url", "")),
+            llm_api_key=str(d.get("llm_api_key", "")),
         )
 
     def save(self, path: Path | None = None) -> None:

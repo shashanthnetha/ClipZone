@@ -32,24 +32,32 @@ class AnthropicVisionClient:
 
     def __init__(self, model: str = "claude-opus-4-8", api_key: Optional[str] = None):
         self.model = model
-        self._api_key = api_key or env.get_api_key()
-        self._client = None  # lazy
-
-    def _ensure(self):
-        if self._client is None:
-            from anthropic import Anthropic  # lazy — keeps the package import-light
-            self._client = Anthropic(api_key=self._api_key) if self._api_key else Anthropic()
-        return self._client
+        self.api_key = api_key
 
     def vision_understand(self, u: Understanding, keyframe_paths: list[str]) -> dict[str, Any]:
-        client = self._ensure()
+        from .provider import get_provider
+        from .prompt import ENRICHMENT_SCHEMA
+
+        # Resolve provider using get_provider, overriding model/api_key if custom values were supplied
+        settings = cfg.Settings.load()
+        if self.api_key:
+            settings.llm_api_key = self.api_key
+        if self.model:
+            settings.llm_model = self.model
+
+        provider = get_provider(settings)
+        if not provider.supports_vision():
+            raise RuntimeError("The configured provider does not support vision capabilities.")
+
         req = build_vision_request(u, keyframe_paths, model=self.model)
-        resp = client.messages.parse(**req)
-        # messages.parse returns parsed_output validated against the json_schema.
-        parsed = getattr(resp, "parsed_output", None)
-        if parsed is None:
-            raise RuntimeError(f"no parsed_output (stop_reason={getattr(resp, 'stop_reason', '?')})")
-        return dict(parsed)
+        system = req.get("system")
+        messages = req.get("messages", [])
+
+        return provider.generate_vision(
+            messages=messages,
+            json_schema=ENRICHMENT_SCHEMA,
+            system_prompt=system
+        )
 
 
 class MockVisionClient:

@@ -111,5 +111,60 @@ class TestClientFactoryAndCost(unittest.TestCase):
         self.assertLess(estimate_cost_usd("claude-sonnet-4-6", frames=60), cost)
 
 
+class TestProviderAbstraction(unittest.TestCase):
+    def test_get_provider_resolves_anthropic(self):
+        from clippilot.brain.provider import get_provider, AnthropicProvider
+        from clippilot.config import Settings
+        
+        # Temporarily mock env variables
+        orig_provider = os.environ.get("LLM_PROVIDER")
+        orig_model = os.environ.get("LLM_MODEL")
+        orig_key = os.environ.get("LLM_API_KEY")
+        
+        os.environ["LLM_PROVIDER"] = "anthropic"
+        os.environ["LLM_MODEL"] = "claude-sonnet-4-6"
+        os.environ["LLM_API_KEY"] = "sk-test-key"
+        
+        try:
+            provider = get_provider()
+            self.assertIsInstance(provider, AnthropicProvider)
+            self.assertEqual(provider.model, "claude-sonnet-4-6")
+            self.assertEqual(provider.api_key, "sk-test-key")
+            
+            # Check capability flags
+            self.assertTrue(provider.supports_vision())
+            self.assertTrue(provider.supports_json())
+            self.assertTrue(provider.supports_streaming())
+        finally:
+            if orig_provider is not None:
+                os.environ["LLM_PROVIDER"] = orig_provider
+            else:
+                os.environ.pop("LLM_PROVIDER", None)
+            if orig_model is not None:
+                os.environ["LLM_MODEL"] = orig_model
+            else:
+                os.environ.pop("LLM_MODEL", None)
+            if orig_key is not None:
+                os.environ["LLM_API_KEY"] = orig_key
+            else:
+                os.environ.pop("LLM_API_KEY", None)
+
+    def test_provider_missing_key_validation(self):
+        from clippilot.brain.provider import AnthropicProvider
+        
+        orig_key = os.environ.pop("LLM_API_KEY", None)
+        orig_ant_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+        
+        try:
+            with self.assertRaises(ValueError):
+                # Should raise ValueError because keys are missing from env and parameters
+                AnthropicProvider(model="claude-opus-4-8", api_key=None)
+        finally:
+            if orig_key is not None:
+                os.environ["LLM_API_KEY"] = orig_key
+            if orig_ant_key is not None:
+                os.environ["ANTHROPIC_API_KEY"] = orig_ant_key
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

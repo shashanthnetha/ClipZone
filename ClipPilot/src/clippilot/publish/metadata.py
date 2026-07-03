@@ -151,13 +151,10 @@ def claude_text_generator(settings) -> Optional[GenerateFn]:
         import anthropic  # noqa: F401
     except ImportError:
         return None
-    model = getattr(settings, "brain_model", "claude-opus-4-8")
+
+    from ..brain.provider import get_provider
+    provider = get_provider(settings)
 
     def gen(prompt: str) -> str:
-        from anthropic import Anthropic
-        client = Anthropic()
-        resp = client.messages.create(model=model, max_tokens=1024,
-                                      messages=[{"role": "user", "content": prompt}])
-        return "".join(getattr(b, "text", "") for b in resp.content
-                       if getattr(b, "type", None) == "text")
+        return provider.generate_text(prompt)
     return gen
