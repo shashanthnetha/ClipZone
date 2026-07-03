@@ -102,19 +102,31 @@ def generate_script(
     import time
     from clippilot.config import Settings
 
-    # Defining the deterministic mock script fallback
+    # Derive a dynamic video title from the topic title
+    topic_title = topic.title.replace("-", " ")
+    title_words = topic_title.strip().replace(".", "").replace("!", "").replace("?", "").split()
+    capitalized = []
+    for w in title_words:
+        if w.lower() in ["is", "on", "your", "now", "in", "and", "the", "a", "an", "to", "for", "with", "by", "at"] and len(capitalized) > 0:
+            capitalized.append(w.lower())
+        else:
+            capitalized.append(w.capitalize())
+    mock_title_derived = " ".join(capitalized)
+    if not any(mock_title_derived.startswith(prefix) for prefix in ["Why", "How", "Stop", "The", "What"]):
+        mock_title_derived = f"Why {mock_title_derived}"
+
     mock_script = Script(
         topic_num=topic.num,
-        title="Stop Closing Credit Cards",
-        hook="Closing credit cards actually hurts your score",
-        niche_context="credit",
+        title=mock_title_derived,
+        hook=topic.angle or topic.title,
+        niche_context=topic.niche or "credit",
         scenes=[
             ScriptScene(
-                narration="Closing a credit card actually hurts your credit score.",
-                visual_desc="Showing credit score dropping from 800 to 720."
+                narration=f"Here is the truth about {topic.title.lower()}.",
+                visual_desc=f"Showing visual representation of {topic.title}."
             ),
             ScriptScene(
-                narration="Instead, keep it open and let it build age.",
+                narration=f"Remember this key fact: {topic.angle or topic.title}.",
                 visual_desc="Visual of older card account glowing with green border."
             )
         ],
@@ -124,6 +136,7 @@ def generate_script(
             "fallback_flag": True,
             "retries": 0,
             "latency": 0.0,
+            "title": mock_title_derived,
         }
     )
 
@@ -213,6 +226,7 @@ def generate_script(
                     "fallback_flag": False,
                     "retries": attempt + 1,
                     "latency": latency,
+                    "title": parsed_data["title"],
                 }
             )
         except Exception as e:

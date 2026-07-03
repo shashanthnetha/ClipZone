@@ -157,7 +157,7 @@ class TestScriptGenerator(unittest.TestCase):
 
         script = generate_script(state, topic, variation, Path("."), retries=3, fallback_to_mock=True)
 
-        self.assertEqual(script.title, "Stop Closing Credit Cards")
+        self.assertEqual(script.title, "Why Title Proposal")
         self.assertTrue(script.metadata["fallback_flag"])
         self.assertEqual(script.metadata["retries"], 3)
 
@@ -182,6 +182,6 @@ class TestScriptGenerator(unittest.TestCase):
 
             script = generate_script(state, topic, variation, Path("."), retries=3, fallback_to_mock=True)
 
-        self.assertEqual(script.title, "Stop Closing Credit Cards")
+        self.assertEqual(script.title, "Why Title Proposal")
         self.assertTrue(script.metadata["fallback_flag"])
         self.assertEqual(script.metadata["provider"], "mock")

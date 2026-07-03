@@ -100,49 +100,53 @@ def execute_production_pipeline(
     timings["load_state"] = round(time.time() - start, 4)
     print(f"✔️ Ledger state loaded.")
 
-    print("\n🚀 [STAGE 2] Selecting Backlog Topic...")
+    print("\n🚀 [STAGE 2] Selecting Backlog Topic and Variation via Strategy Engine...")
     start = time.time()
-    topic = choose_topic(state)
-    timings["choose_topic"] = round(time.time() - start, 4)
-    if not topic:
-        print("❌ No unused topics found in backlog!")
-        return {"success": False, "error": "No unused topics"}
-    print(f"✔️ Chosen Topic {topic.num}: '{topic.title}'")
+    try:
+        from clippilot.brain.performance_store import PerformanceStore
+        from clippilot.brain.learning_engine import LearningEngine
+        from clippilot.brain.strategy_engine import StrategyEngine
 
-    print("\n🚀 [STAGE 3] Selecting Rotation Variation...")
-    start = time.time()
-    topic_cluster = topic.niche or "credit"
-    variation = choose_variation(state, variation_dir, topic_cluster)
-    timings["choose_variation"] = round(time.time() - start, 4)
-    print(f"✔️ Chosen Variation: Title={variation.title}, Voice={variation.voice}")
+        store_path = workspace_dir / "ClipPilot" / "performance_history.jsonl"
+        store = PerformanceStore(store_path)
+        learning_engine = LearningEngine(store)
+        strategy_engine = StrategyEngine(store, learning_engine)
+
+        decision = strategy_engine.make_decision(state, variation_dir)
+        topic = decision.topic
+        variation = decision.variation
+        
+        slug = f"daily_{topic.num}"
+        run_ctx.slug = slug
+
+        if not variation.slug:
+            variation.slug = slug
+        if not variation.date:
+            variation.date = date_str
+
+        print(f"🎯 Strategy Decision: Topic {topic.num} '{topic.title}', Hook '{decision.hook}', Voice '{decision.voice}' (Confidence: {decision.confidence})")
+        print(f"🧐 Reasoning: {decision.reasoning}")
+    except Exception as e:
+        print(f"⚠️ Strategy Engine selection failed: {e}. Falling back to standard rotation.")
+        topic = choose_topic(state)
+        if topic:
+            topic_cluster = topic.niche or "credit"
+            variation = choose_variation(state, variation_dir, topic_cluster)
+            slug = f"daily_{topic.num}"
+            run_ctx.slug = slug
+        else:
+            variation = None
+
+    timings["choose_topic"] = round(time.time() - start, 4)
+    timings["choose_variation"] = 0.0
+
+    if not topic or not variation:
+        print("❌ No unused topics or valid variations found!")
+        return {"success": False, "error": "No unused topics/variations"}
 
     print("\n🚀 [STAGE 4] Script Generation...")
     start = time.time()
-    if not api_key_present:
-        print("⚠️ No API key configured. Using deterministic mock script fallback.")
-        from unittest.mock import patch
-        from clippilot.brain.provider import AnthropicProvider
-        mock_script_response = (
-            "{\n"
-            '  "title": "Stop Closing Credit Cards",\n'
-            '  "hook": "Closing credit cards actually hurts your score",\n'
-            '  "niche_context": "credit",\n'
-            '  "scenes": [\n'
-            '    {\n'
-            '      "narration": "Closing a credit card actually hurts your credit score.",\n'
-            '      "visual_desc": "Showing credit score dropping from 800 to 720."\n'
-            '    },\n'
-            '    {\n'
-            '      "narration": "Instead, keep it open and let it build age.",\n'
-            '      "visual_desc": "Visual of older card account glowing with green border."\n'
-            '    }\n'
-            '  ]\n'
-            "}"
-        )
-        with patch.object(AnthropicProvider, "generate_text", return_value=mock_script_response):
-            script = generate_script(state, topic, variation, workspace_dir)
-    else:
-        script = generate_script(state, topic, variation, workspace_dir)
+    script = generate_script(state, topic, variation, workspace_dir)
     timings["generate_script"] = round(time.time() - start, 4)
     print(f"✔️ Script generated: '{script.title}'")
 
@@ -442,6 +446,7 @@ def execute_production_pipeline(
             schema_version=1,
             pipeline_version="1.0.0",
             git_commit=git_hash,
+            strategy_metadata=decision.metadata if 'decision' in locals() else {},
         )
         store.save_record(perf_record)
         print(f"✔️ Performance metrics recorded to '{store_path}' (Video ID: {video_id})")

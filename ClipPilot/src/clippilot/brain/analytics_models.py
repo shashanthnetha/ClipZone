@@ -69,6 +69,7 @@ class VideoPerformance:
     schema_version: int = 1
     pipeline_version: str = "1.0.0"
     git_commit: str = "unknown"
+    strategy_metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

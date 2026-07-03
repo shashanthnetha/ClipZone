@@ -189,4 +189,5 @@ class PerformanceStore:
             schema_version=int(data.get("schema_version", 1)),
             pipeline_version=data.get("pipeline_version", "1.0.0"),
             git_commit=data.get("git_commit", "unknown"),
+            strategy_metadata=data.get("strategy_metadata", {}),
         )

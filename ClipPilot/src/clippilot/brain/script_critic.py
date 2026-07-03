@@ -173,19 +173,24 @@ def run_script_rewrite(script: Script, feedback: CriticResult, settings: Setting
 
     if not has_api_key:
         # Mock rewrite: return a slightly improved mock script
+        improved_title = script.title
+        if not improved_title.startswith("Why You MUST"):
+            stripped_title = improved_title[4:] if improved_title.startswith("Why ") else improved_title
+            improved_title = f"Why You MUST {stripped_title}"
+
         return Script(
             topic_num=script.topic_num,
-            title="Why You MUST Stop Closing Credit Cards",
-            hook="Stop closing credit cards immediately, it's ruining your credit score!",
-            niche_context="credit",
+            title=improved_title,
+            hook=f"Wait, {script.hook.lower() if script.hook else ''}!",
+            niche_context=script.niche_context,
             scenes=[
                 ScriptScene(
-                    narration="Stop closing credit cards! It destroys your credit score immediately by reducing credit age.",
-                    visual_desc="Showing credit score dropping from 800 to 720."
+                    narration=f"Yes, {script.title.lower()} is a major topic right now.",
+                    visual_desc=script.scenes[0].visual_desc if script.scenes else "Visual representing the main point."
                 ),
                 ScriptScene(
-                    narration="Instead, keep it open and let it build age.",
-                    visual_desc="Visual of older card account glowing with green border."
+                    narration=f"Here is what you need to do: keep track of your {script.niche_context}.",
+                    visual_desc=script.scenes[1].visual_desc if len(script.scenes) > 1 else "Takeaway graphic."
                 )
             ]
         )
@@ -219,19 +224,24 @@ def run_script_rewrite(script: Script, feedback: CriticResult, settings: Setting
         )
     except Exception as e:
         print(f"⚠️ Script rewrite failed: {e}. Falling back to deterministic mock rewrite.")
+        improved_title = script.title
+        if not improved_title.startswith("Why You MUST"):
+            stripped_title = improved_title[4:] if improved_title.startswith("Why ") else improved_title
+            improved_title = f"Why You MUST {stripped_title}"
+
         return Script(
             topic_num=script.topic_num,
-            title="Why You MUST Stop Closing Credit Cards",
-            hook="Stop closing credit cards immediately, it's ruining your credit score!",
-            niche_context="credit",
+            title=improved_title,
+            hook=f"Wait, {script.hook.lower() if script.hook else ''}!",
+            niche_context=script.niche_context,
             scenes=[
                 ScriptScene(
-                    narration="Stop closing credit cards! It destroys your credit score immediately by reducing credit age.",
-                    visual_desc="Showing credit score dropping from 800 to 720."
+                    narration=f"Yes, {script.title.lower()} is a major topic right now.",
+                    visual_desc=script.scenes[0].visual_desc if script.scenes else "Visual representing the main point."
                 ),
                 ScriptScene(
-                    narration="Instead, keep it open and let it build age.",
-                    visual_desc="Visual of older card account glowing with green border."
+                    narration=f"Here is what you need to do: keep track of your {script.niche_context}.",
+                    visual_desc=script.scenes[1].visual_desc if len(script.scenes) > 1 else "Takeaway graphic."
                 )
             ]
         )
@@ -297,8 +307,8 @@ def orchestrate_script_revision(
         chosen_critique = initial_critique
         chosen_score = initial_score
 
-    # Attach all final revision metadata
     chosen_script.metadata.update({
+        "title": chosen_script.title,
         "initial_score": initial_score,
         "final_score": chosen_score,
         "revision_count": 1,
