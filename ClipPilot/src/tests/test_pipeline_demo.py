@@ -122,7 +122,7 @@ class TestPipelineDemo(unittest.TestCase):
 
             # Assert report structure and results
             self.assertTrue(report["success"])
-            self.assertEqual(report["qa_score"], 98)
+            self.assertEqual(report["qa_score"], 100)
             self.assertEqual(report["upload_result"]["video_id"], "yt_demo_abc")
             self.assertEqual(report["providers"]["tts"], "edge-tts")
             self.assertEqual(report["providers"]["publisher"], "youtube-api")

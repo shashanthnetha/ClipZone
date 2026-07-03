@@ -36,6 +36,7 @@ class Script:
     hook: str
     niche_context: str
     scenes: list[ScriptScene] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def _clean_json_text(text: str) -> str:
@@ -91,37 +92,42 @@ def generate_script(
     variation: VariationRecord,
     workspace_dir: Path,
     retries: int = 3,
+    fallback_to_mock: bool = True,
 ) -> Script:
     """Generate a structured script using LLM prompts based on current topic/rules.
 
     Retries on validation/parse errors up to 3 times, raising ScriptValidationError on exhaustion.
     """
     import os
+    import time
     from clippilot.config import Settings
-    settings = Settings.load()
-    api_key_present = bool(
-        os.environ.get("LLM_API_KEY")
-        or os.environ.get("ANTHROPIC_API_KEY")
-        or getattr(settings, "llm_api_key", None)
+
+    # Defining the deterministic mock script fallback
+    mock_script = Script(
+        topic_num=topic.num,
+        title="Stop Closing Credit Cards",
+        hook="Closing credit cards actually hurts your score",
+        niche_context="credit",
+        scenes=[
+            ScriptScene(
+                narration="Closing a credit card actually hurts your credit score.",
+                visual_desc="Showing credit score dropping from 800 to 720."
+            ),
+            ScriptScene(
+                narration="Instead, keep it open and let it build age.",
+                visual_desc="Visual of older card account glowing with green border."
+            )
+        ],
+        metadata={
+            "provider": "mock",
+            "model": "mock",
+            "fallback_flag": True,
+            "retries": 0,
+            "latency": 0.0,
+        }
     )
 
-    if not api_key_present:
-        return Script(
-            topic_num=topic.num,
-            title="Stop Closing Credit Cards",
-            hook="Closing credit cards actually hurts your score",
-            niche_context="credit",
-            scenes=[
-                ScriptScene(
-                    narration="Closing a credit card actually hurts your credit score.",
-                    visual_desc="Showing credit score dropping from 800 to 720."
-                ),
-                ScriptScene(
-                    narration="Instead, keep it open and let it build age.",
-                    visual_desc="Visual of older card account glowing with green border."
-                )
-            ]
-        )
+    settings = Settings.load()
 
     # 1. Read competitor playbook if available
     playbook_content = ""
@@ -167,8 +173,17 @@ def generate_script(
     )
 
     # 3. Request LLM with retries
-    provider = get_provider()
+    try:
+        provider = get_provider(settings)
+    except Exception as e:
+        if fallback_to_mock:
+            print(f"⚠️ Provider initialization failed: {e}. Falling back to deterministic mock script.")
+            return mock_script
+        else:
+            raise ScriptValidationError(f"Provider initialization failed: {e}")
+
     last_err: Optional[Exception] = None
+    start_time = time.time()
 
     for attempt in range(retries):
         try:
@@ -180,16 +195,37 @@ def generate_script(
                 ScriptScene(narration=s["narration"], visual_desc=s["visual_desc"])
                 for s in parsed_data["scenes"]
             ]
+            latency = round(time.time() - start_time, 4)
+            
+            provider_model = getattr(provider, "model", "unknown")
+            # Clear logging for successful provider generation
+            print(f"✔️ Successfully generated script using provider '{provider.__class__.__name__}' (model: {provider_model}) in {latency}s on attempt {attempt + 1}.")
+            
             return Script(
                 topic_num=topic.num,
                 title=parsed_data["title"],
                 hook=parsed_data["hook"],
                 niche_context=parsed_data["niche_context"],
                 scenes=script_scenes,
+                metadata={
+                    "provider": provider.__class__.__name__,
+                    "model": provider_model,
+                    "fallback_flag": False,
+                    "retries": attempt + 1,
+                    "latency": latency,
+                }
             )
         except Exception as e:
             last_err = e
-            # Log retry attempt (optional, test asserts print or exception raise)
+            # Log retry attempt
             continue
+
+    if fallback_to_mock:
+        latency = round(time.time() - start_time, 4)
+        print(f"⚠️ Script generation failed after {retries} attempts. Last error: {last_err}. Falling back to deterministic mock script.")
+        # Return mock script with updated retries/latency info
+        mock_script.metadata["retries"] = retries
+        mock_script.metadata["latency"] = latency
+        return mock_script
 
     raise ScriptValidationError(f"Script generation failed after {retries} attempts. Last error: {last_err}")

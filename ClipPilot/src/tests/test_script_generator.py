@@ -54,9 +54,20 @@ class TestScriptGenerator(unittest.TestCase):
         with self.assertRaises(ScriptValidationError):
             _validate_and_parse_json(bad_scenes)
 
+    def setUp(self) -> None:
+        import os
+        self.old_env = os.environ.copy()
+        os.environ["LLM_API_KEY"] = "mock_key"
+
+    def tearDown(self) -> None:
+        import os
+        os.environ.clear()
+        os.environ.update(self.old_env)
+
     @patch("clippilot.brain.script_generator.get_provider")
     def test_generate_script_success(self, mock_get_provider: unittest.mock.MagicMock) -> None:
         mock_provider = unittest.mock.MagicMock()
+        mock_provider.model = "claude-test"
         mock_get_provider.return_value = mock_provider
 
         valid_response = (
@@ -81,11 +92,15 @@ class TestScriptGenerator(unittest.TestCase):
         self.assertEqual(script.hook, "Hook 1")
         self.assertEqual(len(script.scenes), 1)
         self.assertEqual(script.scenes[0].narration, "Line 1")
+        self.assertFalse(script.metadata["fallback_flag"])
+        self.assertEqual(script.metadata["provider"], "MagicMock")
+        self.assertEqual(script.metadata["model"], "claude-test")
         mock_provider.generate_text.assert_called_once()
 
     @patch("clippilot.brain.script_generator.get_provider")
     def test_generate_script_retry_success(self, mock_get_provider: unittest.mock.MagicMock) -> None:
         mock_provider = unittest.mock.MagicMock()
+        mock_provider.model = "claude-test"
         mock_get_provider.return_value = mock_provider
 
         # First call: garbage response (JSON parse fails)
@@ -110,6 +125,8 @@ class TestScriptGenerator(unittest.TestCase):
 
         self.assertEqual(script.title, "Title 1")
         self.assertEqual(mock_provider.generate_text.call_count, 2)
+        self.assertFalse(script.metadata["fallback_flag"])
+        self.assertEqual(script.metadata["retries"], 2)
 
     @patch("clippilot.brain.script_generator.get_provider")
     def test_generate_script_exhausted_retries(self, mock_get_provider: unittest.mock.MagicMock) -> None:
@@ -124,6 +141,47 @@ class TestScriptGenerator(unittest.TestCase):
         variation = VariationRecord("2026-07-03", "slug", "T01", "F1", "S1", "V1", "L3", "0%", "cluster", "hook")
 
         with self.assertRaises(ScriptValidationError):
-            generate_script(state, topic, variation, Path("."), retries=3)
+            generate_script(state, topic, variation, Path("."), retries=3, fallback_to_mock=False)
 
         self.assertEqual(mock_provider.generate_text.call_count, 3)
+
+    @patch("clippilot.brain.script_generator.get_provider")
+    def test_generate_script_provider_failure_fallback(self, mock_get_provider: unittest.mock.MagicMock) -> None:
+        mock_provider = unittest.mock.MagicMock()
+        mock_get_provider.return_value = mock_provider
+        mock_provider.generate_text.return_value = "permanently bad response"
+
+        state = PipelineState(learned_rules="Rule A")
+        topic = Topic("001", "unused", "Title Proposal", "niche", "angle", "guardrail")
+        variation = VariationRecord("2026-07-03", "slug", "T01", "F1", "S1", "V1", "L3", "0%", "cluster", "hook")
+
+        script = generate_script(state, topic, variation, Path("."), retries=3, fallback_to_mock=True)
+
+        self.assertEqual(script.title, "Stop Closing Credit Cards")
+        self.assertTrue(script.metadata["fallback_flag"])
+        self.assertEqual(script.metadata["retries"], 3)
+
+    def test_generate_script_missing_key_fallback(self) -> None:
+        import os
+        # Temporarily clear all possible API keys
+        for k in ["LLM_API_KEY", "ANTHROPIC_API_KEY"]:
+            if k in os.environ:
+                del os.environ[k]
+
+        state = PipelineState(learned_rules="Rule A")
+        topic = Topic("001", "unused", "Title Proposal", "niche", "angle", "guardrail")
+        variation = VariationRecord("2026-07-03", "slug", "T01", "F1", "S1", "V1", "L3", "0%", "cluster", "hook")
+
+        # Mock settings to make sure llm_api_key is also not configured
+        with patch("clippilot.config.Settings.load") as mock_settings_load:
+            mock_settings = unittest.mock.MagicMock()
+            mock_settings.llm_api_key = None
+            mock_settings.llm_provider = "anthropic"
+            mock_settings.llm_model = "claude-test"
+            mock_settings_load.return_value = mock_settings
+
+            script = generate_script(state, topic, variation, Path("."), retries=3, fallback_to_mock=True)
+
+        self.assertEqual(script.title, "Stop Closing Credit Cards")
+        self.assertTrue(script.metadata["fallback_flag"])
+        self.assertEqual(script.metadata["provider"], "mock")
