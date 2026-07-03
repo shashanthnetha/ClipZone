@@ -53,6 +53,7 @@ class AnalyticsMetrics:
     watch_time_hours: float = 0.0
     subscribers_gained: int = 0
     revenue_usd: float = 0.0
+    last_updated: str = ""
 
 
 @dataclass

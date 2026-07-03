@@ -80,6 +80,13 @@ class PerformanceStore:
                 return record
         return None
 
+    def find_record_by_platform_id(self, platform_video_id: str) -> Optional[VideoPerformance]:
+        """Finds and returns a single record matching the given platform-specific video identifier."""
+        for record in self.load_records():
+            if record.upload_metrics.video_id_on_platform == platform_video_id:
+                return record
+        return None
+
     def list_records(self) -> List[VideoPerformance]:
         """Alias for load_records to retrieve all logged executions."""
         return self.load_records()
@@ -106,6 +113,24 @@ class PerformanceStore:
                 f.write(json.dumps(asdict(r), default=str) + "\n")
         
         os.replace(temp_path, self.store_path)
+
+    def update_analytics(self, video_id: str, analytics_metrics: AnalyticsMetrics) -> None:
+        """Finds record by video_id, updates its analytics_metrics, and saves it."""
+        record = self.find_record(video_id)
+        if record:
+            record.analytics_metrics = analytics_metrics
+            self.update_record(record)
+        else:
+            raise ValueError(f"No performance record found with video_id: {video_id}")
+
+    def update_analytics_by_platform_id(self, platform_video_id: str, analytics_metrics: AnalyticsMetrics) -> None:
+        """Finds record by platform_video_id, updates its analytics_metrics, and saves it."""
+        record = self.find_record_by_platform_id(platform_video_id)
+        if record:
+            record.analytics_metrics = analytics_metrics
+            self.update_record(record)
+        else:
+            raise ValueError(f"No performance record found with platform video_id: {platform_video_id}")
 
     def _deserialize_record(self, data: Dict[str, Any]) -> VideoPerformance:
         """Reconstruct a strongly typed VideoPerformance instance from a dictionary."""
@@ -150,6 +175,7 @@ class PerformanceStore:
             watch_time_hours=float(an_data.get("watch_time_hours", 0.0)),
             subscribers_gained=int(an_data.get("subscribers_gained", 0)),
             revenue_usd=float(an_data.get("revenue_usd", 0.0)),
+            last_updated=str(an_data.get("last_updated", "")),
         )
 
         return VideoPerformance(
