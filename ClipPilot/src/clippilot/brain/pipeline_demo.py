@@ -162,6 +162,32 @@ def execute_production_pipeline(
     timings["plan_scenes"] = round(time.time() - start, 4)
     print(f"✔️ Scene plan blueprints ready.")
 
+    print("\n🚀 [STAGE 5B] Asset Intelligence...")
+    start_assets = time.time()
+    from clippilot.brain.asset_intelligence import AssetIntelligenceEngine
+    asset_engine = AssetIntelligenceEngine()
+    asset_plan = asset_engine.build_asset_plan(script, scene_plan, settings)
+    timings["asset_intelligence"] = round(time.time() - start_assets, 4)
+    report["video_asset_plan"] = asset_plan.to_dict()
+    print("✔️ Asset Plan created.")
+    
+    print("\nAsset Plan")
+    for s_plan in asset_plan.scenes:
+        print(f"\nScene {s_plan.scene_number}")
+        print(f"Background: {s_plan.background}")
+        print(f"Stock Queries:")
+        for sq in s_plan.stock_video_queries:
+            print(f"  {sq}")
+        print(f"Icon Queries:")
+        for icon in s_plan.icon_queries:
+            print(f"  {icon}")
+        if s_plan.chart_type:
+            print(f"Chart:\n  {s_plan.chart_type}")
+        if s_plan.transitions:
+            print(f"Transition:")
+            for trans in s_plan.transitions:
+                print(f"  {trans}")
+
     print("\n🚀 [STAGE 6] Generating Real TTS Audio & Syncing Timings...")
     start = time.time()
     voice_provider = get_voice_provider("edge-tts")
@@ -447,6 +473,7 @@ def execute_production_pipeline(
             pipeline_version="1.0.0",
             git_commit=git_hash,
             strategy_metadata=decision.metadata if 'decision' in locals() else {},
+            video_asset_plan=report.get("video_asset_plan", {}),
         )
         store.save_record(perf_record)
         print(f"✔️ Performance metrics recorded to '{store_path}' (Video ID: {video_id})")
