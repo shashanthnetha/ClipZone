@@ -77,3 +77,85 @@ class LearningRecord:
     video_performance: VideoPerformance
     notes: str = ""
     adjusted_rules: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class HookPerformance:
+    """Aggregated metrics for a specific hook type."""
+    hook: str
+    count: int
+    avg_views: float
+    avg_ctr: float
+    avg_retention: float
+
+
+@dataclass
+class VoicePerformance:
+    """Aggregated metrics for a specific voice."""
+    voice: str
+    count: int
+    avg_views: float
+    avg_watch_time_seconds: float
+
+
+@dataclass
+class SkinPerformance:
+    """Aggregated metrics for a specific skin."""
+    skin: str
+    count: int
+    avg_views: float
+    avg_retention: float
+
+
+@dataclass
+class TopicPerformance:
+    """Aggregated metrics for a specific topic number."""
+    topic_num: str
+    count: int
+    avg_views: float
+    avg_ctr: float
+
+
+@dataclass
+class OverallInsights:
+    """Average metrics across all analyzed runs."""
+    avg_ctr: float = 0.0
+    avg_retention: float = 0.0
+    avg_watch_time: float = 0.0
+    avg_critic_score: float = 0.0
+    avg_vision_qa_score: float = 0.0
+
+
+@dataclass
+class Recommendations:
+    """Deterministic, rule-based recommendations for future content runs."""
+    preferred_hook: str = ""
+    preferred_voice: str = ""
+    preferred_skin: str = ""
+    preferred_format: str = ""
+    preferred_topic: str = ""
+    preferred_niche: str = ""
+    confidence_score: float = 0.0
+    notes: str = ""
+
+
+@dataclass
+class LearningSummary:
+    """Complete summary of historical performance analysis and insights."""
+    records_analyzed: int
+    overall_insights: OverallInsights
+    best_hook: str
+    best_voice: str
+    best_skin: str
+    best_format: str
+    best_niche: str
+    fastest_render_config: Dict[str, Any]
+    correlations: Dict[str, float]
+    top_hooks: List[Dict[str, Any]] = field(default_factory=list)
+    top_voices: List[Dict[str, Any]] = field(default_factory=list)
+    top_skins: List[Dict[str, Any]] = field(default_factory=list)
+    top_formats: List[Dict[str, Any]] = field(default_factory=list)
+    top_topics: List[Dict[str, Any]] = field(default_factory=list)
+    top_niches: List[Dict[str, Any]] = field(default_factory=list)
+    recommendations: Recommendations = field(default_factory=Recommendations)
+
