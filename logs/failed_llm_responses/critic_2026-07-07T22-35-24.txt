@@ -1,0 +1,9 @@
+Failure Reason: Schema validation failure
+Provider: OpenRouterProvider
+Requested Model: openai/gpt-oss-120b:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Correction Attempted: True
+Repair Attempted: True
+
+Raw Response:
+{"title": "3 Credit Cards You Should NEVER Close", "hook": "One card closure = 50-point score crash", "niche_context": "Credit/finance niche \u2014 curiosity-first, jargon-free hook leveraging universal fear of score drops; finance retains 76% AVP but needs algorithm audience building", "scenes": [{"narration": "Closing your oldest card erases 15 years of credit history instantly", "visual_desc": "Extreme close-up: golden scissors snip a glowing credit card labeled 'OLDEST 15 YRS' in gold #FFD23F; card shatters into timeline fragments"}, {"narration": "Your utilization spikes from 10% to 90% overnight", "visual_desc": "Speed meter UI: needle slams from green '10%' to red '90%' in gold #FFD23F; background pulses alarm red"}, {"narration": "Lenders flag you as risky \u2014 rates jump on every loan", "visual_desc": "Stack of loan documents; each stamps 'RATE SPIKE' in gold #FFD23F; camera pushes through papers"}, {"narration": "Keep it open, use it once a year, and your score stays protected", "visual_desc": "Card reappears whole with gold shield 'PROTECTED'; tiny calendar icon '1X/YEAR' floats above; end frame holds for loop"}, {"narration": "Tap subscribe for more credit hacks that save you thousands", "visual_desc": "Animated subscribe button pulses in gold #FFD23F; text '

@@ -13,8 +13,9 @@ class TestDoctor(unittest.TestCase):
         self._benv = benv
         self._orig_load = benv.load_dotenv
         benv.load_dotenv = lambda *a, **k: None  # don't let a real .env inject creds
-        self._keys = ("ANTHROPIC_API_KEY", "YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET",
-                      "YOUTUBE_REFRESH_TOKEN", "UPLOAD_POST_API_KEY", "UPLOAD_POST_USERNAME")
+        self._keys = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "LLM_API_KEY",
+                      "YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REFRESH_TOKEN",
+                      "UPLOAD_POST_API_KEY", "UPLOAD_POST_USERNAME")
         self._saved = {k: os.environ.pop(k, None) for k in self._keys}
 
     def tearDown(self):

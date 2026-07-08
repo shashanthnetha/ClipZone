@@ -18,6 +18,24 @@ class TestAssetIntelligence(unittest.TestCase):
     """Test suite for AssetIntelligenceEngine asset planning logic."""
 
     def setUp(self) -> None:
+        import os
+        self._keys = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "LLM_API_KEY")
+        self._saved = {k: os.environ.pop(k, None) for k in self._keys}
+        
+        self.mock_settings = Settings(
+            llm_provider="openrouter",
+            llm_api_key="",
+            pexels_api_key="",
+            pixabay_api_key="",
+            unsplash_api_key=""
+        )
+        self.load_patcher = patch("clippilot.config.Settings.load", return_value=self.mock_settings)
+        self.load_patcher.start()
+
+        from clippilot.brain import env
+        self.orig_load_dotenv = env.load_dotenv
+        env.load_dotenv = lambda *a, **k: None
+
         self.engine = AssetIntelligenceEngine()
 
     def test_empty_script(self) -> None:
@@ -148,7 +166,7 @@ class TestAssetIntelligence(unittest.TestCase):
         plan = self.engine.build_asset_plan(script, render_tree)
 
         self.assertEqual(plan.metadata["provider"], "MagicMock")
-        self.assertEqual(plan.metadata["model"], "claude-3-5")
+        self.assertEqual(plan.metadata["actual_model"], "claude-3-5")
         self.assertEqual(len(plan.scenes), 1)
 
         s_plan = plan.scenes[0]
@@ -179,3 +197,12 @@ class TestAssetIntelligence(unittest.TestCase):
         self.assertEqual(len(deserialized["scenes"]), 1)
         self.assertEqual(deserialized["scenes"][0]["scene_number"], 1)
         self.assertEqual(deserialized["scenes"][0]["fallback_assets"][0]["provider"], "mock")
+
+    def tearDown(self) -> None:
+        self.load_patcher.stop()
+        from clippilot.brain import env
+        env.load_dotenv = self.orig_load_dotenv
+        import os
+        for k, v in self._saved.items():
+            if v is not None:
+                os.environ[k] = v

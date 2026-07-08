@@ -99,24 +99,21 @@ class TestVisionQA(unittest.TestCase):
         self.assertEqual(res.summary, "QA completed successfully (simulated fallback).")
         mock_get_vision.assert_not_called()
 
-    @patch("clippilot.brain.vision_qa.get_vision_provider")
-    def test_run_vision_qa_real_mocked(self, mock_get_vision: MagicMock) -> None:
+    def test_run_vision_qa_real_mocked(self) -> None:
         mock_provider = MagicMock()
-        mock_get_vision.return_value = mock_provider
+        mock_provider.supports_vision.return_value = True
 
-        response_text = (
-            "{\n"
-            "  \"score\": 92,\n"
-            "  \"blank_frame_detected\": false,\n"
-            "  \"subtitle_clipping_detected\": false,\n"
-            "  \"ocr_mismatches\": [],\n"
-            "  \"summary\": \"Looks great.\",\n"
-            "  \"analyses\": [\n"
-            "    {\"frame_seconds\": 0.75, \"subtitle_visible\": true, \"subtitle_clipped\": false, \"blank_frame\": false, \"ocr_text\": \"Line\"}\n"
-            "  ]\n"
-            "}"
-        )
-        mock_provider.analyze_images.return_value = VisionResult(text=response_text)
+        response_dict = {
+            "score": 92,
+            "blank_frame_detected": False,
+            "subtitle_clipping_detected": False,
+            "ocr_mismatches": [],
+            "summary": "Looks great.",
+            "analyses": [
+                {"frame_seconds": 0.75, "subtitle_visible": True, "subtitle_clipped": False, "blank_frame": False, "ocr_text": "Line"}
+            ]
+        }
+        mock_provider.generate_vision.return_value = response_dict
 
         script = Script("006", "Closing", "Stop", "credit", [ScriptScene("Line A.", "V")])
         variation = VariationRecord("2026-07-03", "slug", "T01", "F1", "S1", "V1", "L3", "0%", "credit", "question")
@@ -127,13 +124,13 @@ class TestVisionQA(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             temp_img = Path(tmp_dir) / "frame1.png"
-            temp_img.write_text("dummy image data")
+            temp_img.write_bytes(b"dummy image data")
 
-            res = run_vision_qa("out.mp4", script, tree, [], [str(temp_img)])
+            res = run_vision_qa("out.mp4", script, tree, [], [str(temp_img)], provider=mock_provider)
 
             self.assertTrue(res.passed)
             self.assertEqual(res.score, 92)
             self.assertEqual(len(res.frame_analyses), 1)
             self.assertEqual(res.frame_analyses[0].ocr_text, "Line")
-            mock_provider.analyze_images.assert_called_once()
+            mock_provider.generate_vision.assert_called_once()
 window = None

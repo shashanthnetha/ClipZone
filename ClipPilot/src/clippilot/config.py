@@ -9,8 +9,19 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+# Automatically detect test environment and force mock mode
+if "unittest" in sys.modules or "pytest" in sys.modules or os.environ.get("CLIPPILOT_TESTING") == "true":
+    os.environ["CLIPPILOT_TESTING"] = "true"
+    for key in [
+        "LLM_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+        "PEXELS_API_KEY", "PIXABAY_API_KEY", "UNSPLASH_API_KEY"
+    ]:
+        if key in os.environ:
+            del os.environ[key]
 
 APP_NAME = "ClipPilot"
 
@@ -106,6 +117,34 @@ class Settings:
     llm_model: str = "claude-opus-4-8"
     llm_base_url: str = ""
     llm_api_key: str = ""
+    enable_reasoning_correction: bool = True
+    script_model: str = ""
+    critic_model: str = ""
+    vision_model: str = ""
+    asset_model: str = ""
+    script_models: list[str] = field(default_factory=lambda: [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "qwen/qwen-2.5-72b-instruct:free"
+    ])
+    critic_models: list[str] = field(default_factory=lambda: [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "qwen/qwen-2.5-72b-instruct:free"
+    ])
+    vision_models: list[str] = field(default_factory=lambda: [
+        "google/gemini-2.0-flash-exp:free",
+        "google/gemini-flash-1.5-8b:free",
+        "meta-llama/llama-3.2-11b-vision-instruct:free",
+        "qwen/qwen2.5-vl-72b-instruct:free"
+    ])
+    asset_models: list[str] = field(default_factory=lambda: [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free"
+    ])
 
     # ── Asset Provider Configuration ──
     pexels_api_key: str = ""
@@ -139,18 +178,49 @@ class Settings:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Settings":
-        # Tolerate unknown/typo'd or non-dict guardrail keys instead of crashing
-        # (reachable via the MCP set_settings tool, which accepts a free-form object).
         raw_g = d.get("guardrails")
         if not isinstance(raw_g, dict):
             raw_g = {}
         allowed = set(Guardrails.__dataclass_fields__)
         g = Guardrails(**{k: v for k, v in raw_g.items() if k in allowed})
+        
         priority = d.get("asset_provider_priority")
         if isinstance(priority, str):
             priority = [x.strip() for x in priority.split(",") if x.strip()]
         elif not isinstance(priority, list):
             priority = ["pexels", "pixabay", "unsplash"]
+
+        def parse_model_list(val: Any, default_list: list[str]) -> list[str]:
+            if val is None:
+                return default_list
+            if isinstance(val, str):
+                return [x.strip() for x in val.split(",") if x.strip()]
+            elif isinstance(val, list):
+                return [str(x) for x in val]
+            return default_list
+
+        script_models = parse_model_list(d.get("script_models"), [
+            "openai/gpt-oss-120b:free",
+            "qwen/qwen3-next-80b-a3b-instruct:free",
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+            "meta-llama/llama-3.3-70b-instruct:free"
+        ])
+        critic_models = parse_model_list(d.get("critic_models"), [
+            "openai/gpt-oss-120b:free",
+            "qwen/qwen3-next-80b-a3b-instruct:free",
+            "nvidia/nemotron-3-ultra-550b-a55b:free"
+        ])
+        vision_models = parse_model_list(d.get("vision_models"), [
+            "openrouter/free",
+            "google/gemini-flash-1.5-8b:free",
+            "qwen/qwen2.5-vl-72b-instruct:free",
+            "meta-llama/llama-3.2-11b-vision-instruct:free"
+        ])
+        asset_models = parse_model_list(d.get("asset_models"), [
+            "qwen/qwen3-next-80b-a3b-instruct:free",
+            "openai/gpt-oss-120b:free",
+            "nvidia/nemotron-3-ultra-550b-a55b:free"
+        ])
 
         return cls(
             auto_approve=bool(d.get("auto_approve", False)),
@@ -167,6 +237,15 @@ class Settings:
             llm_model=str(d.get("llm_model", d.get("brain_model", "claude-opus-4-8"))),
             llm_base_url=str(d.get("llm_base_url", "")),
             llm_api_key=str(d.get("llm_api_key", "")),
+            enable_reasoning_correction=bool(d.get("enable_reasoning_correction", False)),
+            script_model=str(d.get("script_model", "")),
+            critic_model=str(d.get("critic_model", "")),
+            vision_model=str(d.get("vision_model", "")),
+            asset_model=str(d.get("asset_model", "")),
+            script_models=script_models,
+            critic_models=critic_models,
+            vision_models=vision_models,
+            asset_models=asset_models,
             pexels_api_key=str(d.get("pexels_api_key", "")),
             pixabay_api_key=str(d.get("pixabay_api_key", "")),
             unsplash_api_key=str(d.get("unsplash_api_key", "")),
@@ -195,21 +274,6 @@ class Settings:
         from .brain import env as benv
         benv.load_dotenv()
         
-        # Map secrets from provider-specific variables if not already set in settings.json
-        if not settings.llm_api_key:
-            if settings.llm_provider == "anthropic":
-                settings.llm_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-            elif settings.llm_provider == "openai":
-                settings.llm_api_key = os.environ.get("OPENAI_API_KEY", "")
-            elif settings.llm_provider == "openrouter":
-                settings.llm_api_key = os.environ.get("OPENROUTER_API_KEY", "")
-        if not settings.pexels_api_key:
-            settings.pexels_api_key = os.environ.get("PEXELS_API_KEY", "")
-        if not settings.pixabay_api_key:
-            settings.pixabay_api_key = os.environ.get("PIXABAY_API_KEY", "")
-        if not settings.unsplash_api_key:
-            settings.unsplash_api_key = os.environ.get("UNSPLASH_API_KEY", "") or os.environ.get("UNSPLASH_ACCESS_KEY", "")
-        
         # Standard field overrides
         for field_name in cls.__dataclass_fields__:
             if field_name == "guardrails":
@@ -228,11 +292,26 @@ class Settings:
                         setattr(settings, field_name, int(env_val))
                     elif field_type is float or field_type == "float":
                         setattr(settings, field_name, float(env_val))
-                    elif field_name == "asset_provider_priority":
+                    elif field_name in ("asset_provider_priority", "script_models", "critic_models", "vision_models", "asset_models"):
                         setattr(settings, field_name, [x.strip() for x in env_val.split(",") if x.strip()])
                     else:
                         setattr(settings, field_name, env_val)
                     break
+        
+        # Map secrets from provider-specific variables if not already set
+        if not settings.llm_api_key:
+            if settings.llm_provider == "anthropic":
+                settings.llm_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            elif settings.llm_provider == "openai":
+                settings.llm_api_key = os.environ.get("OPENAI_API_KEY", "")
+            elif settings.llm_provider == "openrouter":
+                settings.llm_api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not settings.pexels_api_key:
+            settings.pexels_api_key = os.environ.get("PEXELS_API_KEY", "")
+        if not settings.pixabay_api_key:
+            settings.pixabay_api_key = os.environ.get("PIXABAY_API_KEY", "")
+        if not settings.unsplash_api_key:
+            settings.unsplash_api_key = os.environ.get("UNSPLASH_API_KEY", "") or os.environ.get("UNSPLASH_ACCESS_KEY", "")
         
         # Override llm_api_key specifically if LLM_API_KEY is present
         api_key_override = os.environ.get("CLIPPILOT_LLM_API_KEY") or os.environ.get("LLM_API_KEY")

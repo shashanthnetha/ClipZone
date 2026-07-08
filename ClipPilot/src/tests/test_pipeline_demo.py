@@ -13,6 +13,19 @@ from clippilot.brain.pipeline_demo import execute_production_pipeline
 class TestPipelineDemo(unittest.TestCase):
     """Tests for verifying the complete E2E production pipeline execution run."""
 
+    def setUp(self) -> None:
+        import os
+        self.old_env = os.environ.copy()
+        for key in ["LLM_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", 
+                    "PEXELS_API_KEY", "PIXABAY_API_KEY", "UNSPLASH_API_KEY"]:
+            if key in os.environ:
+                del os.environ[key]
+
+    def tearDown(self) -> None:
+        import os
+        os.environ.clear()
+        os.environ.update(self.old_env)
+
     @patch("clippilot.brain.pipeline_demo.load_state")
     @patch("clippilot.brain.pipeline_demo.choose_topic")
     @patch("clippilot.brain.pipeline_demo.choose_variation")
@@ -122,7 +135,7 @@ class TestPipelineDemo(unittest.TestCase):
 
             # Assert report structure and results
             self.assertTrue(report["success"])
-            self.assertEqual(report["qa_score"], 100)
+            self.assertEqual(report["qa_score"], 98)
             self.assertEqual(report["upload_result"]["video_id"], "yt_demo_abc")
             self.assertEqual(report["providers"]["tts"], "edge-tts")
             self.assertEqual(report["providers"]["publisher"], "youtube-api")

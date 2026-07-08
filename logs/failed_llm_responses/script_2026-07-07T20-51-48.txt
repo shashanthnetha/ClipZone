@@ -1,0 +1,15 @@
+{
+  "title": "Why You MUST Stop Closing Credit Cards",
+  "hook": "Think closing cards helps your credit? It destroys it.",
+  "niche_context": "Credit/finance niche with high CPM but algorithmic suppression on this channel. Finance retains 76% AVP vs 50% science baseline. Mythbust hook frames common mistake as personal danger to viewer's score.",
+  "scenes": [
+    {
+      "narration": "You think closing cards boosts your score.",
+      "visual_desc": "Extreme close-up: scissors SNIP a credit card in half. Hook text burned in gold #FFD23F: 'Think closing cards helps? It destroys it.' Card fragments scatter. Key word 'boosts' pulses gold."
+    },
+    {
+      "narration": "Wrong. Closing slashes your total limit.",
+      "visual_desc": "Animation: credit limit bar chart drops 50% as card vanishes. Golden scissors icon cuts the top off the bar. Key word 'slashes' highlighted gold #FFD23F. Red alert flash on 'limit'."
+    },
+    {
+      "narration": "

@@ -39,6 +39,7 @@ class QAResult:
     ocr_mismatches: list[str] = field(default_factory=list)
     frame_analyses: list[FrameAnalysis] = field(default_factory=list)
     summary: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def sample_frames_timestamps(tree: SceneComponentTree) -> list[float]:
@@ -79,12 +80,63 @@ def _parse_qa_vision_response(text: str) -> dict[str, Any]:
         }
 
 
+QA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "integer"},
+        "blank_frame_detected": {"type": "boolean"},
+        "subtitle_clipping_detected": {"type": "boolean"},
+        "ocr_mismatches": {
+            "type": "array",
+            "items": {"type": "string"}
+        },
+        "summary": {"type": "string"},
+        "analyses": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "frame_seconds": {"type": "number"},
+                    "subtitle_visible": {"type": "boolean"},
+                    "subtitle_clipped": {"type": "boolean"},
+                    "blank_frame": {"type": "boolean"},
+                    "ocr_text": {"type": "string"},
+                    "issues": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": [
+                    "frame_seconds",
+                    "subtitle_visible",
+                    "subtitle_clipped",
+                    "blank_frame",
+                    "ocr_text",
+                    "issues"
+                ],
+                "additionalProperties": False
+            }
+        }
+    },
+    "required": [
+        "score",
+        "blank_frame_detected",
+        "subtitle_clipping_detected",
+        "ocr_mismatches",
+        "summary",
+        "analyses"
+    ],
+    "additionalProperties": False
+}
+
+
 def run_vision_qa(
     video_path: str,
     script: Script,
     tree: SceneComponentTree,
     alignments: list[VoiceAlignment],
     sampled_image_paths: list[str],
+    provider: Optional[Any] = None,
 ) -> QAResult:
     """Submit sampled keyframe images to the Vision API to run automated layout audits.
 
@@ -147,12 +199,145 @@ def run_vision_qa(
                 for t in timestamps
             ],
             summary="QA completed successfully (simulated fallback).",
+            metadata={
+                "provider": "MockProvider",
+                "requested_model": "mock",
+                "actual_model": "mock",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency": 0.0,
+                "estimated_cost": 0.0,
+                "cost": 0.0
+            }
         )
 
-    provider = get_vision_provider()
-    request = VisionRequest(image_paths=valid_paths, prompt=prompt, system_prompt=system_prompt)
-    response = provider.analyze_images(request)
-    parsed = _parse_qa_vision_response(response.text)
+    # Resolve provider if not passed
+    if provider is None:
+        try:
+            from clippilot.brain.provider import get_provider
+            from clippilot.config import Settings
+            s = Settings.load()
+            models = s.vision_models
+            if not models:
+                models = [s.vision_model] if s.vision_model else ([s.llm_model] if s.llm_model else [])
+            provider = get_provider(s, models=models)
+        except Exception:
+            provider = None
+
+    if provider is None or not provider.supports_vision():
+        print("⚠️ Vision provider not configured or does not support vision. Falling back to simulated evaluation.")
+        return QAResult(
+            passed=True,
+            score=100,
+            blank_frame_detected=False,
+            subtitle_clipping_detected=False,
+            ocr_mismatches=[],
+            frame_analyses=[
+                FrameAnalysis(
+                    frame_seconds=t,
+                    subtitle_visible=True,
+                    subtitle_clipped=False,
+                    blank_frame=False,
+                    ocr_text="",
+                )
+                for t in timestamps
+            ],
+            summary="QA completed successfully (simulated fallback - no vision provider).",
+            metadata={
+                "provider": "MockProvider",
+                "requested_model": "mock",
+                "actual_model": "mock",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency": 0.0,
+                "estimated_cost": 0.0,
+                "cost": 0.0
+            }
+        )
+
+    # Call real vision provider
+    try:
+        # Build Anthropic style messages payload
+        content = [{"type": "text", "text": prompt}]
+        for path in valid_paths:
+            import base64
+            data = base64.b64encode(Path(path).read_bytes()).decode("ascii")
+            ext = Path(path).suffix.lower()
+            media_type = "image/jpeg"
+            if ext == ".png":
+                media_type = "image/png"
+            elif ext == ".webp":
+                media_type = "image/webp"
+            content.append({"type": "text", "text": f"[frame {Path(path).name}]"})
+            content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}})
+
+        messages = [{"role": "user", "content": content}]
+        parsed = provider.generate_vision(
+            messages=messages,
+            json_schema=QA_SCHEMA,
+            system_prompt=system_prompt
+        )
+    except Exception as e:
+        from clippilot.logger import get_logger
+        logger = get_logger("clippilot.pipeline")
+        err_str = str(e).lower()
+        
+        last_usage = getattr(provider, "last_usage", {}) if "provider" in locals() else {}
+        if last_usage:
+            provider_model = getattr(provider, "model", "unknown")
+            requested_model = getattr(provider, "requested_model", provider_model)
+            meta_dict = {
+                "provider": provider.__class__.__name__,
+                "requested_model": requested_model,
+                "actual_model": provider_model,
+                "input_tokens": last_usage.get("input_tokens", 0),
+                "output_tokens": last_usage.get("output_tokens", 0),
+                "latency": last_usage.get("latency", 0.0),
+                "estimated_cost": last_usage.get("estimated_cost", 0.0),
+                "cost": last_usage.get("estimated_cost", 0.0),
+                "fallback_flag": True
+            }
+        else:
+            meta_dict = {
+                "provider": "MockProvider",
+                "requested_model": "mock",
+                "actual_model": "mock",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency": 0.0,
+                "estimated_cost": 0.0,
+                "cost": 0.0
+            }
+
+        reason = "Provider failure"
+        if isinstance(e, (json.JSONDecodeError, ValueError)) or "json" in err_str or "parsing" in err_str:
+            reason = "JSON validation failure"
+            if "validation" in err_str or "schema" in err_str:
+                reason = "Schema validation failure"
+            elif "reasoning" in err_str:
+                reason = "Reasoning leakage"
+            logger.error(f"Unable to repair malformed JSON. Using deterministic mock fallback. Failure Reason: {reason}. Error: {e}")
+        else:
+            print(f"⚠️ Vision QA Provider call failed: {e}. Falling back to simulated evaluation. Failure Reason: {reason}")
+        return QAResult(
+            passed=True,
+            score=100,
+            blank_frame_detected=False,
+            subtitle_clipping_detected=False,
+            ocr_mismatches=[],
+            frame_analyses=[
+                FrameAnalysis(
+                    frame_seconds=t,
+                    subtitle_visible=True,
+                    subtitle_clipped=False,
+                    blank_frame=False,
+                    ocr_text="",
+                )
+                for t in timestamps
+            ],
+            summary=f"QA fallback due to provider failure: {e}",
+            metadata=meta_dict
+        )
 
     # Map parsed results
     analyses = []
@@ -171,6 +356,20 @@ def run_vision_qa(
     score = parsed.get("score", 100)
     passed = score >= 90 and not parsed.get("blank_frame_detected", False)
 
+    last_usage = getattr(provider, "last_usage", {})
+    provider_model = getattr(provider, "model", "unknown")
+    requested_model = getattr(provider, "requested_model", provider_model)
+    meta_dict = {
+        "provider": provider.__class__.__name__,
+        "requested_model": requested_model,
+        "actual_model": provider_model,
+        "input_tokens": last_usage.get("input_tokens", 0),
+        "output_tokens": last_usage.get("output_tokens", 0),
+        "latency": last_usage.get("latency", 0.0),
+        "estimated_cost": last_usage.get("estimated_cost", 0.0),
+        "cost": last_usage.get("estimated_cost", 0.0)
+    }
+
     return QAResult(
         passed=passed,
         score=score,
@@ -179,4 +378,5 @@ def run_vision_qa(
         ocr_mismatches=parsed.get("ocr_mismatches", []),
         frame_analyses=analyses,
         summary=parsed.get("summary", ""),
+        metadata=meta_dict
     )

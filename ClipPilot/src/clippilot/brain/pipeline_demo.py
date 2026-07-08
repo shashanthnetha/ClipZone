@@ -91,6 +91,17 @@ def execute_production_pipeline(
     skip_qa_publish: bool = False,
 ) -> dict[str, Any]:
     """Executes the E2E production pipeline with real renderers and real TTS."""
+    from clippilot.brain.provider import pipeline_diagnostics
+    pipeline_diagnostics["attempts"].clear()
+    pipeline_diagnostics["correction_requests"] = 0
+    pipeline_diagnostics["json_repairs"] = 0
+    pipeline_diagnostics["schema_failures"] = 0
+    pipeline_diagnostics["total_latency"] = 0.0
+    pipeline_diagnostics["input_tokens"] = 0
+    pipeline_diagnostics["output_tokens"] = 0
+    pipeline_diagnostics["actual_provider"] = None
+    pipeline_diagnostics["actual_model"] = None
+
     timings = {}
     report = {}
 
@@ -98,6 +109,8 @@ def execute_production_pipeline(
     api_key_present = bool(
         os.environ.get("LLM_API_KEY")
         or os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("OPENROUTER_API_KEY")
         or settings.llm_api_key
     )
 
@@ -319,8 +332,37 @@ def execute_production_pipeline(
             root_path.unlink()
 
     if skip_qa_publish:
-        llm_cost = 0.0135 if api_key_present else 0.0
-        total_cost = round(llm_cost, 5)
+        script_cost = script.metadata.get("cost", 0.0) if script.metadata else 0.0
+        critic_cost = script.metadata.get("critic_usage", {}).get("cost", 0.0) if script.metadata else 0.0
+        asset_cost = asset_plan.metadata.get("cost", 0.0) if 'asset_plan' in locals() and asset_plan else 0.0
+        total_cost = round(script_cost + critic_cost + asset_cost, 6)
+
+        if script.metadata:
+            script.metadata["stage_usages"] = {
+                "script": {
+                    "provider": script.metadata.get("provider"),
+                    "requested_model": script.metadata.get("requested_model"),
+                    "actual_model": script.metadata.get("actual_model"),
+                    "input_tokens": script.metadata.get("input_tokens"),
+                    "output_tokens": script.metadata.get("output_tokens"),
+                    "latency": script.metadata.get("latency"),
+                    "estimated_cost": script.metadata.get("estimated_cost"),
+                    "cost": script.metadata.get("cost")
+                },
+                "critic": script.metadata.get("critic_usage", {}),
+                "asset": asset_plan.metadata if 'asset_plan' in locals() and asset_plan else {},
+                "vision_qa": {
+                    "provider": "MockProvider",
+                    "requested_model": "mock",
+                    "actual_model": "mock",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "latency": 0.0,
+                    "estimated_cost": 0.0,
+                    "cost": 0.0
+                }
+            }
+
         # Stop here and return success
         report["success"] = True
         report["providers"] = {
@@ -357,7 +399,7 @@ def execute_production_pipeline(
 
             gen_metrics = GenerationMetrics(
                 llm_provider=report["providers"]["llm"],
-                llm_model=settings.llm_model or "claude-opus-4-8",
+                llm_model=script.metadata.get("actual_model", settings.llm_model or "claude-opus-4-8"),
                 script_critic_score=script.metadata.get("final_score", 0.0),
                 vision_qa_score=100.0,
                 render_time_seconds=timings.get("execute_remotion", 0.0),
@@ -428,40 +470,7 @@ def execute_production_pipeline(
             sampled_image_paths.append(str(img_path))
         current_time += duration
 
-    # Run actual Vision QA checks
-    has_vision_api = bool(os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY"))
-    if not has_vision_api:
-        print("⚠️ No API key configured. Using deterministic mock Vision QA fallback.")
-        # Sample timestamps at scene midpoints
-        timestamps = []
-        c_time = 0.0
-        for s in tree.scenes:
-            dur = s.timing.duration_frames / tree.fps
-            mid = c_time + (dur / 2.0)
-            timestamps.append(round(mid, 2))
-            c_time += dur
-            
-        from clippilot.brain.vision_qa import QAResult, FrameAnalysis
-        qa_res = QAResult(
-            passed=True,
-            score=100,
-            blank_frame_detected=False,
-            subtitle_clipping_detected=False,
-            ocr_mismatches=[],
-            frame_analyses=[
-                FrameAnalysis(
-                    frame_seconds=t,
-                    subtitle_visible=True,
-                    subtitle_clipped=False,
-                    blank_frame=False,
-                    ocr_text="",
-                )
-                for t in timestamps
-            ],
-            summary="Vision QA skipped because no API key was configured.",
-        )
-    else:
-        qa_res = run_vision_qa(str(output_mp4), script, tree, all_alignments, sampled_image_paths)
+    qa_res = run_vision_qa(str(output_mp4), script, tree, all_alignments, sampled_image_paths, provider=None)
     timings["vision_qa"] = round(time.time() - start, 4)
     print(f"✔️ Vision QA complete. Score: {qa_res.score}/100. Status: {qa_res.passed}")
 
@@ -486,21 +495,42 @@ def execute_production_pipeline(
     print(f"✔️ Publisher upload complete. Success: {pub_res.success}")
 
     # Calculate real run cost estimate based on tokens and API pricing
-    # Sonnet Pricing: Input: $3.00 / 1M. Output: $15.00 / 1M
-    # OpenAI gpt-4o QA: Input: $5.00 / 1M. Output: $15.00 / 1M
-    # Edge-tts: $0.00
-    llm_cost = 0.0135 if api_key_present else 0.0
-    qa_cost = 0.0050 if api_key_present and len(sampled_image_paths) > 0 else 0.0
-    total_cost = round(llm_cost + qa_cost, 5)
+    script_cost = script.metadata.get("cost", 0.0) if script.metadata else 0.0
+    critic_cost = script.metadata.get("critic_usage", {}).get("cost", 0.0) if script.metadata else 0.0
+    asset_cost = asset_plan.metadata.get("cost", 0.0) if 'asset_plan' in locals() and asset_plan else 0.0
+    qa_cost = qa_res.metadata.get("cost", 0.0)
+    total_cost = round(script_cost + critic_cost + asset_cost + qa_cost, 6)
+
+    if script.metadata:
+        script.metadata["stage_usages"] = {
+            "script": {
+                "provider": script.metadata.get("provider"),
+                "requested_model": script.metadata.get("requested_model"),
+                "actual_model": script.metadata.get("actual_model"),
+                "input_tokens": script.metadata.get("input_tokens"),
+                "output_tokens": script.metadata.get("output_tokens"),
+                "latency": script.metadata.get("latency"),
+                "estimated_cost": script.metadata.get("estimated_cost"),
+                "cost": script.metadata.get("cost")
+            },
+            "critic": script.metadata.get("critic_usage", {}),
+            "asset": asset_plan.metadata if 'asset_plan' in locals() and asset_plan else {},
+            "vision_qa": qa_res.metadata
+        }
 
     # Compile the final report
     report["success"] = True
     report["timings"] = timings
     report["total_time_seconds"] = round(sum(timings.values()), 4)
+    
+    qa_prov = qa_res.metadata.get("provider", "mock-fallback")
+    qa_model = qa_res.metadata.get("actual_model", "none")
+    llm_prov = script.metadata.get("provider", "mock-fallback") if script.metadata else "mock-fallback"
+    
     report["providers"] = {
-        "llm": settings.llm_provider if api_key_present else "mock-fallback",
+        "llm": llm_prov,
         "tts": "edge-tts",
-        "vision_qa": "openai-compatible" if api_key_present else "simulated-fallback",
+        "vision_qa": f"{qa_prov} ({qa_model})" if qa_prov != "MockProvider" else "simulated-fallback",
         "publisher": "youtube-api",
     }
     report["cost_estimate_usd"] = total_cost
@@ -515,6 +545,37 @@ def execute_production_pipeline(
         "video_id": pub_res.video_id,
         "url": pub_res.url,
     }
+
+    from clippilot.brain.provider import pipeline_diagnostics
+    print("\n=========================================")
+    print("Model attempts:")
+    attempts = pipeline_diagnostics.get("attempts", [])
+    model_stats = {}
+    for att in attempts:
+        m = att["model"]
+        status = att["status"]
+        lat = att["latency"]
+        if m not in model_stats:
+            model_stats[m] = {"attempts": [], "total_latency": 0.0}
+        model_stats[m]["attempts"].append(status)
+        model_stats[m]["total_latency"] += lat
+        
+    for m, stats in model_stats.items():
+        print(f"  {m}")
+        for status in stats["attempts"]:
+            print(f"    {status}")
+            
+    print("\nTime spent per model:")
+    for m, stats in model_stats.items():
+        print(f"  {m}: {stats['total_latency']:.4f}s")
+        
+    print(f"\nRetry count          : {len(attempts) - 1 if attempts else 0}")
+    print(f"Correction requests  : {pipeline_diagnostics.get('correction_requests', 0)}")
+    print(f"JSON repairs         : {pipeline_diagnostics.get('json_repairs', 0)}")
+    print(f"Schema failures      : {pipeline_diagnostics.get('schema_failures', 0)}")
+    print(f"Estimated token usage: Input={pipeline_diagnostics.get('input_tokens', 0)}, Output={pipeline_diagnostics.get('output_tokens', 0)}")
+    print(f"Actual provider used : {pipeline_diagnostics.get('actual_provider') or 'None'}")
+    print("=========================================")
 
     print("\n=========================================")
     print("PRODUCTION PIPELINE COMPLETED SUCCESSFULLY")
@@ -541,7 +602,7 @@ def execute_production_pipeline(
 
         gen_metrics = GenerationMetrics(
             llm_provider=report["providers"]["llm"],
-            llm_model=settings.llm_model or "claude-opus-4-8",
+            llm_model=script.metadata.get("actual_model", settings.llm_model or "claude-opus-4-8"),
             script_critic_score=script.metadata.get("final_score", 0.0),
             vision_qa_score=float(qa_res.score),
             render_time_seconds=timings.get("execute_remotion", 0.0),

@@ -1,0 +1,9 @@
+Failure Reason: JSON validation failure
+Provider: MagicMock
+Requested Model: nemotron-test
+Actual Model: nemotron-test
+Correction Attempted: True
+Repair Attempted: True
+
+Raw Response:
+This is NOT valid JSON.

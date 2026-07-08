@@ -17,6 +17,8 @@ API_KEY_VAR = "ANTHROPIC_API_KEY"
 
 def load_dotenv(path: Optional[Path] = None) -> None:
     """Load KEY=VALUE lines from a .env file into os.environ (no override)."""
+    if os.environ.get("CLIPPILOT_TESTING") == "true":
+        return
     path = path or (cfg.PROJECT_ROOT / ".env")
     if not path.exists():
         return
@@ -38,4 +40,17 @@ def get_api_key() -> Optional[str]:
 
 
 def has_api_key() -> bool:
-    return bool(get_api_key())
+    load_dotenv()
+    try:
+        from ..config import Settings
+        s = Settings.load()
+        if s.llm_api_key:
+            return True
+    except Exception:
+        pass
+    return bool(
+        os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("OPENROUTER_API_KEY")
+        or os.environ.get("LLM_API_KEY")
+    )

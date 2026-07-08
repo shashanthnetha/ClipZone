@@ -1,0 +1,8 @@
+Failure Reason: JSON validation failure
+Provider: OpenRouterProvider
+Requested Model: openai/gpt-oss-120b:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Correction Attempted: False
+Repair Attempted: True
+
+Raw Response:

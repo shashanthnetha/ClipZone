@@ -1,0 +1,81 @@
+The user wants a JSON script for a vertical video short about "Why You MUST Stop Closing Credit Cards" with specific parameters. Let me analyze the requirements:
+
+1. Topic: Why You MUST Stop Closing Credit Cards (credit niche)
+2. Format: F1
+3. Skin Style: S2
+4. Voice/Length: V1 (L1) - which means ≤20s, ~55-60 spoken words
+5. Hook Type: question
+6. Brand Guardrails: safe
+
+Key rules from the optimization rules:
+- ≤20s script (~55-60 spoken words)
+- Cold open on frame 0 with hook as burned-in caption
+- Change visual on EVERY narration phrase (~1 transform per ~2s)
+- Highlight key noun/number in gold (#FFD23F)
+- End CTA matched to video shape (hidden-mechanism reveal → "watch it again")
+- Finance retains well (76.1% AVP) - don't change hooks based on low views
+- Universal-curiosity beats finance on this channel, but finance retains better
+- Hook type: question
+- Frame 0 = mystery itself + hook claim burned in
+
+Since this is a finance topic (credit cards) but the channel is coded as science, I need to make it curiosity-first, jargon-free hook. The hook should be a question.
+
+Let me craft a ≤20s script with ~55-60 words. Each scene should be a phrase (~2s each), so roughly 8-10 scenes for 20s.
+
+Hook (question): "Ever wonder why closing a card tanks your score?"
+
+Scenes breakdown (each ~2s, ~7-8 words per scene):
+1. Hook question + visual: credit card being cut up
+2. "It kills your utilization ratio instantly." 
+3. "Less credit = higher percentage used."
+4. "Lenders see risk, not responsibility."
+5. "Oldest account gone? History shortened."
+6. "Average age drops, score follows."
+7. "Hard inquiry stays, benefit vanishes."
+8. "Keep it open, use tiny bit."
+9. "Auto-pay a subscription, forget it."
+10. "Score climbs while you sleep."
+
+That's about 55-60 words. Let me count:
+1. "Ever wonder why closing a card tanks your score?" (11 words)
+2. "It kills your utilization ratio instantly." (7 words)
+3. "Less credit means higher percentage used." (7 words)
+4. "Lenders see risk, not responsibility." (6 words)
+5. "Oldest account gone? History shortened." (5 words)
+6. "Average age drops, score follows." (6 words)
+7. "Hard inquiry stays, benefit vanishes." (6 words)
+8. "Keep it open, use tiny bit." (7 words)
+9. "Auto-pay a subscription, forget it." (6 words)
+10. "Score climbs while you sleep." (6 words)
+
+Total: ~67 words - a bit high. Let me tighten.
+
+Revised:
+1. "Ever wonder why closing a card tanks your score?" (11)
+2. "It kills your utilization ratio instantly." (7)
+3. "Less credit = higher percentage used." (6)
+4. "Lenders see risk, not responsibility." (6)
+5. "Oldest account gone? History erased." (5)
+6. "Average age drops, score follows." (6)
+7. "Hard inquiry stays, benefit gone." (6)
+8. "Keep it open, charge tiny bit." (7)
+9. "Auto-pay Netflix, forget it." (5)
+10. "Score climbs while you sleep." (6)
+
+Total: ~65 words. Still a bit high for ≤20s. At 150 wpm, 65 words = 26 seconds. Need ~50 words for 20s.
+
+Let me do 8 scenes at ~6-7 words each = ~50 words.
+
+1. "Ever wonder why closing a card tanks your score?" (11) - hook
+2. "It murders your utilization ratio instantly." (7)
+3. "Less credit = higher percent used." (6)
+4. "Lenders see risk, not responsibility." (6)
+5. "Oldest card gone? History erased." (5)
+6. "Average age drops, score follows." (6)
+7. "Keep it open, charge tiny bit." (7)
+8. "Auto-pay Netflix, forget it." (5)
+9. "Score climbs while you sleep." (6)
+
+That's 9 scenes, ~59 words. Still high. Let me combine some.
+
+Actually, the rule says "~5

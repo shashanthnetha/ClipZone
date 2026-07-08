@@ -115,8 +115,15 @@ class EdgeTTSProvider:
 
             return alignments, round(duration, 3)
 
-        # Run async communciate save loop inside sync boundary
-        alignments, duration = asyncio.run(_generate())
+        # Run async communicate save loop inside sync boundary
+        coro = _generate()
+        try:
+            alignments, duration = asyncio.run(coro)
+        finally:
+            try:
+                coro.close()
+            except RuntimeError:
+                pass
 
         # Group words into sentences timings heuristically
         sentences_timings = []

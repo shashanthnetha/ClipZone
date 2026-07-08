@@ -38,6 +38,30 @@ class Script:
     scenes: list[ScriptScene] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
+SCRIPT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "hook": {"type": "string"},
+        "niche_context": {"type": "string"},
+        "scenes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "narration": {"type": "string"},
+                    "visual_desc": {"type": "string"}
+                },
+                "required": ["narration", "visual_desc"],
+                "additionalProperties": False
+            }
+        }
+    },
+    "required": ["title", "hook", "niche_context", "scenes"],
+    "additionalProperties": False
+}
+
+
 
 def _clean_json_text(text: str) -> str:
     """Strip markdown code fences and extraneous text surrounding the JSON payload."""
@@ -56,9 +80,9 @@ def _clean_json_text(text: str) -> str:
 
 def _validate_and_parse_json(text: str) -> dict[str, Any]:
     """Parse JSON text and validate against the expected schema."""
-    cleaned = _clean_json_text(text)
+    from clippilot.brain.provider import tolerant_json_loads
     try:
-        data = json.loads(cleaned)
+        data = tolerant_json_loads(text)
     except Exception as e:
         raise ScriptValidationError(f"Invalid JSON format: {e}")
 
@@ -142,6 +166,22 @@ def generate_script(
 
     settings = Settings.load()
 
+    from clippilot.brain.env import has_api_key
+    if fallback_to_mock and not has_api_key():
+        print("⚠️ No API key configured. Using deterministic mock script.")
+        mock_script.metadata.update({
+            "provider": "MockProvider",
+            "requested_model": "mock",
+            "actual_model": "mock",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "latency": 0.0,
+            "estimated_cost": 0.0,
+            "cost": 0.0,
+            "fallback_flag": True
+        })
+        return mock_script
+
     # 1. Read competitor playbook if available
     playbook_content = ""
     playbook_path = workspace_dir / "competitor_playbook.md"
@@ -187,59 +227,156 @@ def generate_script(
 
     # 3. Request LLM with retries
     try:
-        provider = get_provider(settings)
+        models = settings.script_models
+        if not models:
+            models = [settings.script_model] if settings.script_model else ([settings.llm_model] if settings.llm_model else [])
+        provider = get_provider(settings, models=models)
     except Exception as e:
         if fallback_to_mock:
             print(f"⚠️ Provider initialization failed: {e}. Falling back to deterministic mock script.")
+            mock_script.metadata.update({
+                "provider": "MockProvider",
+                "requested_model": "mock",
+                "actual_model": "mock",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency": 0.0,
+                "estimated_cost": 0.0,
+                "cost": 0.0,
+                "fallback_flag": True
+            })
             return mock_script
         else:
             raise ScriptValidationError(f"Provider initialization failed: {e}")
 
     last_err: Optional[Exception] = None
     start_time = time.time()
+    raw_response = None
+    api_succeeded = False
+    attempt = 0
 
     for attempt in range(retries):
         try:
-            raw_response = provider.generate_text(prompt=user_prompt, system_prompt=system_prompt)
-            parsed_data = _validate_and_parse_json(raw_response)
-
-            # Map to typed Script object
-            script_scenes = [
-                ScriptScene(narration=s["narration"], visual_desc=s["visual_desc"])
-                for s in parsed_data["scenes"]
-            ]
-            latency = round(time.time() - start_time, 4)
-            
-            provider_model = getattr(provider, "model", "unknown")
-            # Clear logging for successful provider generation
-            print(f"✔️ Successfully generated script using provider '{provider.__class__.__name__}' (model: {provider_model}) in {latency}s on attempt {attempt + 1}.")
-            
-            return Script(
-                topic_num=topic.num,
-                title=parsed_data["title"],
-                hook=parsed_data["hook"],
-                niche_context=parsed_data["niche_context"],
-                scenes=script_scenes,
-                metadata={
-                    "provider": provider.__class__.__name__,
-                    "model": provider_model,
-                    "fallback_flag": False,
-                    "retries": attempt + 1,
-                    "latency": latency,
-                    "title": parsed_data["title"],
-                }
-            )
+            raw_response = provider.generate_text(prompt=user_prompt, system_prompt=system_prompt, json_schema=SCRIPT_SCHEMA)
+            api_succeeded = True
+            break
         except Exception as e:
+            from clippilot.brain.provider import JSONParsingError
+            if isinstance(e, JSONParsingError):
+                last_err = e
+                break
             last_err = e
-            # Log retry attempt
             continue
 
-    if fallback_to_mock:
-        latency = round(time.time() - start_time, 4)
-        print(f"⚠️ Script generation failed after {retries} attempts. Last error: {last_err}. Falling back to deterministic mock script.")
-        # Return mock script with updated retries/latency info
-        mock_script.metadata["retries"] = retries
-        mock_script.metadata["latency"] = latency
-        return mock_script
+    if not api_succeeded:
+        if fallback_to_mock:
+            latency = round(time.time() - start_time, 4)
+            err_reason = "JSON validation failure"
+            if "schema validation" in str(last_err).lower() or "missing required key" in str(last_err).lower():
+                err_reason = "Schema validation failure"
+            elif last_err and "leakage" in str(last_err).lower():
+                err_reason = "Reasoning leakage"
+            print(f"⚠️ Script generation API failed after {attempt + 1} attempts. Last error: {last_err}. Falling back to deterministic mock script.")
+            mock_script.metadata.update({
+                "provider": provider.__class__.__name__ if 'provider' in locals() and provider else "MockProvider",
+                "requested_model": getattr(provider, "requested_model", "mock") if 'provider' in locals() and provider else "mock",
+                "actual_model": getattr(provider, "model", "mock") if 'provider' in locals() and provider else "mock",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency": latency,
+                "estimated_cost": 0.0,
+                "cost": 0.0,
+                "retries": attempt + 1,
+                "fallback_flag": True
+            })
+            return mock_script
+        else:
+            raise ScriptValidationError(f"Script generation failed: {last_err}")
 
-    raise ScriptValidationError(f"Script generation failed after {retries} attempts. Last error: {last_err}")
+    # Once raw_response is fetched successfully: DO NOT retry the API.
+    # Parse and validate the response
+    try:
+        parsed_data = _validate_and_parse_json(raw_response)
+        
+        # Map to typed Script object
+        script_scenes = [
+            ScriptScene(narration=s["narration"], visual_desc=s["visual_desc"])
+            for s in parsed_data["scenes"]
+        ]
+        latency = round(time.time() - start_time, 4)
+        
+        provider_model = getattr(provider, "model", "unknown")
+        requested_model = getattr(provider, "requested_model", provider_model)
+        print(f"✔️ Successfully generated script using provider '{provider.__class__.__name__}' (model: {provider_model}) in {latency}s.")
+        
+        last_usage = getattr(provider, "last_usage", {})
+        meta_dict = {
+            "provider": provider.__class__.__name__,
+            "requested_model": requested_model,
+            "actual_model": provider_model,
+            "input_tokens": last_usage.get("input_tokens", 0),
+            "output_tokens": last_usage.get("output_tokens", 0),
+            "latency": latency,
+            "estimated_cost": last_usage.get("estimated_cost", 0.0),
+            "cost": last_usage.get("estimated_cost", 0.0),
+            "fallback_flag": False,
+            "retries": attempt + 1,
+            "title": parsed_data["title"],
+        }
+            
+        return Script(
+            topic_num=topic.num,
+            title=parsed_data["title"],
+            hook=parsed_data["hook"],
+            niche_context=parsed_data["niche_context"],
+            scenes=script_scenes,
+            metadata=meta_dict,
+        )
+    except Exception as parse_err:
+        from clippilot.logger import get_logger
+        logger = get_logger("clippilot.pipeline")
+        
+        is_leakage = False
+        if raw_response:
+            from clippilot.brain.provider import detects_reasoning_leakage
+            is_leakage = detects_reasoning_leakage(raw_response)
+            
+        reason = "JSON validation failure"
+        if is_leakage:
+            reason = "Reasoning leakage"
+        elif "Missing required key" in str(parse_err) or "must be a list" in str(parse_err) or "cannot be empty" in str(parse_err) or "schema validation" in str(parse_err).lower():
+            reason = "Schema validation failure"
+            
+        logger.error(f"Unable to repair malformed JSON. Using deterministic mock fallback. Failure Reason: {reason}. Error: {parse_err}")
+        from clippilot.brain.provider import save_failed_response
+        save_failed_response(
+            stage_name="script",
+            raw_response=raw_response,
+            reason=reason,
+            provider=provider.__class__.__name__,
+            requested_model=getattr(provider, "requested_model", None),
+            actual_model=getattr(provider, "model", None),
+            correction_attempted=True,
+            repair_attempted=True,
+            schema_validation_status="failed" if reason == "Schema validation failure" else "not_applicable"
+        )
+        if fallback_to_mock:
+            latency = round(time.time() - start_time, 4)
+            last_usage = getattr(provider, "last_usage", {})
+            provider_model = getattr(provider, "model", "unknown")
+            requested_model = getattr(provider, "requested_model", provider_model)
+            mock_script.metadata.update({
+                "provider": provider.__class__.__name__,
+                "requested_model": requested_model,
+                "actual_model": provider_model,
+                "input_tokens": last_usage.get("input_tokens", 0),
+                "output_tokens": last_usage.get("output_tokens", 0),
+                "latency": latency,
+                "estimated_cost": last_usage.get("estimated_cost", 0.0),
+                "cost": last_usage.get("estimated_cost", 0.0),
+                "retries": attempt + 1,
+                "fallback_flag": True
+            })
+            return mock_script
+        else:
+            raise ScriptValidationError(f"JSON validation failed: {parse_err}")

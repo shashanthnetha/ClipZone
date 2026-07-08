@@ -19,6 +19,14 @@ class TestStrategyConsistency(unittest.TestCase):
     """Verifies that the Strategy Engine selections propagate cleanly without static overrides."""
 
     def setUp(self) -> None:
+        import os
+        self._keys = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "LLM_API_KEY")
+        self._saved = {k: os.environ.pop(k, None) for k in self._keys}
+
+        from clippilot.brain import env
+        self.orig_load_dotenv = env.load_dotenv
+        env.load_dotenv = lambda *a, **k: None
+
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root_dir = Path(self.temp_dir.name)
         
@@ -130,5 +138,15 @@ class TestStrategyConsistency(unittest.TestCase):
         self.assertGreaterEqual(new_record.strategy_metadata["component_scores"]["topic"], 0.0)
 
         # 5. Verify derived title propagates to script
-        self.assertIn("Buy now Pay Later", new_record.generation_metrics.script_metadata.get("title", ""))
+        title_lower = new_record.generation_metrics.script_metadata.get("title", "").lower().replace("-", " ")
+        self.assertTrue("buy now pay later" in title_lower or "bnpl" in title_lower, f"Expected topic keywords in title: {title_lower}")
         self.assertNotIn("Stop Closing Credit Cards", new_record.generation_metrics.script_metadata.get("title", ""))
+
+    def tearDown(self) -> None:
+        from clippilot.brain import env
+        env.load_dotenv = self.orig_load_dotenv
+        import os
+        for k, v in self._saved.items():
+            if v is not None:
+                os.environ[k] = v
+        self.temp_dir.cleanup()

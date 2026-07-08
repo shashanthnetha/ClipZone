@@ -1,0 +1,9 @@
+Failure Reason: JSON validation failure
+Provider: OpenAIProvider
+Requested Model: model-a
+Actual Model: model-a
+Correction Attempted: False
+Repair Attempted: True
+
+Raw Response:
+This is completely unrecoverable junk.

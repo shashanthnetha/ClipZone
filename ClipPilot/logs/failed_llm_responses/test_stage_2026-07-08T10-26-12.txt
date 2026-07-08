@@ -1,0 +1,12 @@
+Stage: test_stage
+Requested Model: Unknown
+Actual Model: Unknown
+Provider: Unknown
+Reason: test reason
+Repair Attempted: False
+Correction Attempted: False
+Schema Validation Status: not_applicable
+Timestamp: 2026-07-08 10:26:12
+
+Raw Response:
+This is raw failed response content.

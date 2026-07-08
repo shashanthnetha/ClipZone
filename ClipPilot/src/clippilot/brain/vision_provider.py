@@ -58,9 +58,27 @@ class OpenAICompatibleVisionProvider:
         model_name: Optional[str] = None,
     ) -> None:
         settings = Settings.load()
-        self.api_key = api_key or settings.llm_api_key or os.getenv("OPENAI_API_KEY")
-        self.base_url = base_url or settings.llm_base_url or "https://api.openai.com/v1"
-        self.model_name = model_name or settings.llm_model or "gpt-4o"
+        provider_name = settings.llm_provider.lower()
+        
+        self.api_key = api_key
+        if not self.api_key:
+            if provider_name == "openrouter":
+                self.api_key = os.getenv("OPENROUTER_API_KEY") or settings.llm_api_key
+            elif provider_name == "openai":
+                self.api_key = os.getenv("OPENAI_API_KEY") or settings.llm_api_key
+            elif provider_name == "anthropic":
+                self.api_key = os.getenv("ANTHROPIC_API_KEY") or settings.llm_api_key
+            else:
+                self.api_key = os.getenv("LLM_API_KEY") or settings.llm_api_key
+
+        self.base_url = base_url or settings.llm_base_url
+        if not self.base_url:
+            if provider_name == "openrouter":
+                self.base_url = "https://openrouter.ai/api/v1"
+            else:
+                self.base_url = "https://api.openai.com/v1"
+
+        self.model_name = model_name or settings.vision_model or settings.brain_model or settings.llm_model or "gpt-4o"
 
     def validate(self) -> None:
         """Assert API credentials are fully configured."""

@@ -7,6 +7,7 @@ suite) works without the SDK or an API key installed.
 """
 from __future__ import annotations
 
+import os
 from typing import Any, Optional, Protocol
 
 from .. import config as cfg
@@ -27,23 +28,20 @@ class VisionClient(Protocol):
         ...
 
 
-class AnthropicVisionClient:
-    """Real client. Sends keyframes as image blocks + forces the JSON schema."""
+class ProviderVisionClient:
+    """Real client. Sends keyframes as image blocks + forces the JSON schema via resolved provider."""
 
-    def __init__(self, model: str = "claude-opus-4-8", api_key: Optional[str] = None):
+    def __init__(self, model: str, provider_name: str):
         self.model = model
-        self.api_key = api_key
+        self.provider_name = provider_name
 
     def vision_understand(self, u: Understanding, keyframe_paths: list[str]) -> dict[str, Any]:
         from .provider import get_provider
         from .prompt import ENRICHMENT_SCHEMA
 
-        # Resolve provider using get_provider, overriding model/api_key if custom values were supplied
         settings = cfg.Settings.load()
-        if self.api_key:
-            settings.llm_api_key = self.api_key
-        if self.model:
-            settings.llm_model = self.model
+        settings.llm_model = self.model
+        settings.llm_provider = self.provider_name
 
         provider = get_provider(settings)
         if not provider.supports_vision():
@@ -53,11 +51,15 @@ class AnthropicVisionClient:
         system = req.get("system")
         messages = req.get("messages", [])
 
-        return provider.generate_vision(
+        self.last_usage = {}
+        result = provider.generate_vision(
             messages=messages,
             json_schema=ENRICHMENT_SCHEMA,
             system_prompt=system
         )
+        if hasattr(provider, "last_usage"):
+            self.last_usage = provider.last_usage
+        return result
 
 
 class MockVisionClient:
@@ -86,16 +88,44 @@ class MockVisionClient:
 
 
 def get_client(settings: Optional[cfg.Settings] = None) -> Optional[VisionClient]:
-    """Real client if `anthropic` is importable AND a key is present; else None.
-    Callers fall back to the deterministic Understanding (no enrichment)."""
-    settings = settings or cfg.Settings.load()
+    """Real client if the configured provider is importable and its key is present; else None."""
     if not env.has_api_key():
         return None
-    try:
-        import anthropic  # noqa: F401 — availability probe
-    except ImportError:
+    settings = settings or cfg.Settings.load()
+    provider_name = settings.llm_provider.lower()
+    
+    has_key = False
+    if provider_name == "anthropic":
+        has_key = bool(settings.llm_api_key or os.environ.get("ANTHROPIC_API_KEY"))
+    elif provider_name == "openai":
+        has_key = bool(settings.llm_api_key or os.environ.get("OPENAI_API_KEY"))
+    elif provider_name == "openrouter":
+        has_key = bool(settings.llm_api_key or os.environ.get("OPENROUTER_API_KEY"))
+        
+    if not has_key:
         return None
-    return AnthropicVisionClient(model=settings.brain_model)
+
+    if provider_name == "anthropic":
+        try:
+            import anthropic  # noqa: F401
+        except ImportError:
+            return None
+    elif provider_name in ("openai", "openrouter"):
+        try:
+            import openai  # noqa: F401
+        except ImportError:
+            return None
+
+    model = settings.vision_model or settings.brain_model or settings.llm_model
+    if not model:
+        if provider_name == "anthropic":
+            model = "claude-opus-4-8"
+        elif provider_name == "openai":
+            model = "gpt-4o"
+        elif provider_name == "openrouter":
+            model = "openrouter/free"
+
+    return ProviderVisionClient(model=model, provider_name=provider_name)
 
 
 def estimate_cost_usd(model: str, frames: int, avg_frame_tokens: int = 600,

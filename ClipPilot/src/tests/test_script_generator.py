@@ -94,7 +94,7 @@ class TestScriptGenerator(unittest.TestCase):
         self.assertEqual(script.scenes[0].narration, "Line 1")
         self.assertFalse(script.metadata["fallback_flag"])
         self.assertEqual(script.metadata["provider"], "MagicMock")
-        self.assertEqual(script.metadata["model"], "claude-test")
+        self.assertEqual(script.metadata["actual_model"], "claude-test")
         mock_provider.generate_text.assert_called_once()
 
     @patch("clippilot.brain.script_generator.get_provider")
@@ -115,7 +115,7 @@ class TestScriptGenerator(unittest.TestCase):
             "  ]\n"
             "}"
         )
-        mock_provider.generate_text.side_effect = ["garbage response", valid_response]
+        mock_provider.generate_text.side_effect = [RuntimeError("API error"), valid_response]
 
         state = PipelineState(learned_rules="Rule A")
         topic = Topic("001", "unused", "Title Proposal", "niche", "angle", "guardrail")
@@ -133,8 +133,8 @@ class TestScriptGenerator(unittest.TestCase):
         mock_provider = unittest.mock.MagicMock()
         mock_get_provider.return_value = mock_provider
 
-        # Fails persistently on all attempts
-        mock_provider.generate_text.return_value = "permanently bad response"
+        # Fails persistently on all attempts with API error
+        mock_provider.generate_text.side_effect = RuntimeError("API error")
 
         state = PipelineState(learned_rules="Rule A")
         topic = Topic("001", "unused", "Title Proposal", "niche", "angle", "guardrail")
@@ -149,7 +149,7 @@ class TestScriptGenerator(unittest.TestCase):
     def test_generate_script_provider_failure_fallback(self, mock_get_provider: unittest.mock.MagicMock) -> None:
         mock_provider = unittest.mock.MagicMock()
         mock_get_provider.return_value = mock_provider
-        mock_provider.generate_text.return_value = "permanently bad response"
+        mock_provider.generate_text.side_effect = RuntimeError("API error")
 
         state = PipelineState(learned_rules="Rule A")
         topic = Topic("001", "unused", "Title Proposal", "niche", "angle", "guardrail")
@@ -184,4 +184,4 @@ class TestScriptGenerator(unittest.TestCase):
 
         self.assertEqual(script.title, "Why Title Proposal")
         self.assertTrue(script.metadata["fallback_flag"])
-        self.assertEqual(script.metadata["provider"], "mock")
+        self.assertEqual(script.metadata["provider"], "MockProvider")

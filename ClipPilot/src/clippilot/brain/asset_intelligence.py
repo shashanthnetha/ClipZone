@@ -18,6 +18,52 @@ from clippilot.logger import get_logger
 
 logger = get_logger("clippilot.assets")
 
+ASSET_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "scenes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "scene_number": {"type": "integer"},
+                    "background": {"type": "string"},
+                    "stock_video_queries": {"type": "array", "items": {"type": "string"}},
+                    "image_queries": {"type": "array", "items": {"type": "string"}},
+                    "icon_queries": {"type": "array", "items": {"type": "string"}},
+                    "chart_type": {"type": "string"},
+                    "overlay_text": {"type": "string"},
+                    "animations": {"type": "array", "items": {"type": "string"}},
+                    "transitions": {"type": "array", "items": {"type": "string"}},
+                    "fallback_assets": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "asset_type": {"type": "string"},
+                                "provider": {"type": "string"},
+                                "search_query": {"type": "string"},
+                                "local_path": {"type": "string"},
+                                "priority": {"type": "integer"},
+                                "required": {"type": "boolean"}
+                            },
+                            "required": ["asset_type", "provider", "search_query", "local_path", "priority", "required"],
+                            "additionalProperties": False
+                        }
+                    }
+                },
+                "required": [
+                    "scene_number", "background", "stock_video_queries", "image_queries", 
+                    "icon_queries", "chart_type", "overlay_text", "animations", "transitions", "fallback_assets"
+                ],
+                "additionalProperties": False
+            }
+        }
+    },
+    "required": ["scenes"],
+    "additionalProperties": False
+}
+
 def print(*args, **kwargs):
     msg = " ".join(str(a) for a in args)
     if "⚠️" in msg:
@@ -43,6 +89,9 @@ class AssetIntelligenceEngine:
         """Determines background, stock footage queries, icons, charts, and transitions for every scene."""
         if settings is None:
             settings = Settings.load()
+
+        if not script.scenes:
+            return VideoAssetPlan(scenes=[], metadata={"provider": "mock", "model": "none"})
 
         # Check for provider API keys
         has_api_key = bool(
@@ -91,20 +140,26 @@ class AssetIntelligenceEngine:
             user_prompt += f"Scene {i+1}: Narration: {s.narration} | Visual Description: {s.visual_desc}\n"
 
         # 2. Call LLM
+        # 2. Call LLM
+        provider_called_successfully = False
         try:
-            provider = get_provider(settings)
-            raw_response = provider.generate_text(prompt=user_prompt, system_prompt=system_prompt)
-            # Remove potential JSON markdown fences
-            cleaned = raw_response.strip()
-            if cleaned.startswith("```json"):
-                cleaned = cleaned[7:]
-            if cleaned.startswith("```"):
-                cleaned = cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
+            from clippilot.brain.env import has_api_key
+            if not has_api_key():
+                raise ValueError("No API key configured")
+            models = settings.asset_models
+            if not models:
+                models = [settings.asset_model] if settings.asset_model else ([settings.llm_model] if settings.llm_model else [])
+            provider = get_provider(settings, models=models)
+            raw_response = provider.generate_text(prompt=user_prompt, system_prompt=system_prompt, json_schema=ASSET_SCHEMA)
+            provider_called_successfully = True
+        except Exception as e:
+            print(f"⚠️ Asset Intelligence Provider call failed: {e}. Falling back to deterministic plan.")
+            return self._build_deterministic_plan(script, render_tree)
 
-            parsed = json.loads(cleaned)
+        # 3. Parse JSON (only if provider succeeded, do not catch inside the same retry/loop)
+        try:
+            from clippilot.brain.provider import tolerant_json_loads
+            parsed = tolerant_json_loads(raw_response)
             scenes_plan = []
             for sp in parsed.get("scenes", []):
                 fallback_refs = [
@@ -133,14 +188,70 @@ class AssetIntelligenceEngine:
                     )
                 )
 
+            last_usage = getattr(provider, "last_usage", {})
+            provider_model = getattr(provider, "model", "unknown")
+            requested_model = getattr(provider, "requested_model", provider_model)
+            meta_dict = {
+                "provider": provider.__class__.__name__,
+                "requested_model": requested_model,
+                "actual_model": provider_model,
+                "input_tokens": last_usage.get("input_tokens", 0),
+                "output_tokens": last_usage.get("output_tokens", 0),
+                "latency": last_usage.get("latency", 0.0),
+                "estimated_cost": last_usage.get("estimated_cost", 0.0),
+                "cost": last_usage.get("estimated_cost", 0.0)
+            }
+
             return VideoAssetPlan(
                 scenes=scenes_plan,
-                metadata={"provider": provider.__class__.__name__, "model": getattr(provider, "model", "unknown")}
+                metadata=meta_dict
             )
-
-        except Exception as e:
-            print(f"⚠️ Asset Intelligence Provider call failed: {e}. Falling back to deterministic plan.")
-            return self._build_deterministic_plan(script, render_tree)
+        except Exception as parse_err:
+            from clippilot.logger import get_logger
+            logger = get_logger("clippilot.pipeline")
+            
+            is_leakage = False
+            if raw_response:
+                from clippilot.brain.provider import detects_reasoning_leakage
+                is_leakage = detects_reasoning_leakage(raw_response)
+                
+            reason = "JSON validation failure"
+            if is_leakage:
+                reason = "Reasoning leakage"
+            elif isinstance(parse_err, (KeyError, AttributeError, TypeError)):
+                reason = "Schema validation failure"
+                
+            logger.error(f"Unable to repair malformed JSON. Using deterministic mock fallback. Failure Reason: {reason}. Error: {parse_err}")
+            from clippilot.brain.provider import save_failed_response
+            save_failed_response(
+                stage_name="asset",
+                raw_response=raw_response,
+                reason=reason,
+                provider=provider.__class__.__name__ if "provider" in locals() else "unknown",
+                requested_model=getattr(provider, "requested_model", None) if "provider" in locals() else None,
+                actual_model=getattr(provider, "model", None) if "provider" in locals() else None,
+                correction_attempted=True,
+                repair_attempted=True,
+                schema_validation_status="failed" if reason == "Schema validation failure" else "not_applicable"
+            )
+            
+            last_usage = getattr(provider, "last_usage", {}) if "provider" in locals() else {}
+            provider_model = getattr(provider, "model", "unknown") if "provider" in locals() else "unknown"
+            requested_model = getattr(provider, "requested_model", provider_model) if "provider" in locals() else "unknown"
+            meta_dict = {
+                "provider": provider.__class__.__name__ if "provider" in locals() else "MockProvider",
+                "requested_model": requested_model,
+                "actual_model": provider_model,
+                "input_tokens": last_usage.get("input_tokens", 0),
+                "output_tokens": last_usage.get("output_tokens", 0),
+                "latency": last_usage.get("latency", 0.0),
+                "estimated_cost": last_usage.get("estimated_cost", 0.0),
+                "cost": last_usage.get("estimated_cost", 0.0),
+                "fallback_flag": True
+            }
+            plan = self._build_deterministic_plan(script, render_tree)
+            plan.metadata = meta_dict
+            return plan
 
     def _build_deterministic_plan(self, script: Script, render_tree: Any) -> VideoAssetPlan:
         """Deterministically extracts background style, stock/icon queries, and motion elements."""
@@ -233,5 +344,14 @@ class AssetIntelligenceEngine:
 
         return VideoAssetPlan(
             scenes=scenes_plan,
-            metadata={"provider": "mock", "model": "deterministic"}
+            metadata={
+                "provider": "MockProvider",
+                "requested_model": "mock",
+                "actual_model": "mock",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency": 0.0,
+                "estimated_cost": 0.0,
+                "cost": 0.0
+            }
         )

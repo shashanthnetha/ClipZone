@@ -16,11 +16,79 @@ from typing import Any, Dict, Optional
 
 from clippilot.brain.pipeline_orchestrator import PipelineState, Topic, VariationRecord
 from clippilot.brain.provider import get_provider
-from clippilot.brain.script_generator import Script, ScriptScene, _validate_and_parse_json, ScriptValidationError
+from clippilot.brain.script_generator import Script, ScriptScene, _validate_and_parse_json, ScriptValidationError, SCRIPT_SCHEMA
 from clippilot.config import Settings
 from clippilot.logger import get_logger
 
 logger = get_logger("clippilot.critic")
+
+CRITIC_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "hook": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "number"},
+                "reason": {"type": "string"},
+                "improvement": {"type": "string"}
+            },
+            "required": ["score", "reason", "improvement"],
+            "additionalProperties": False
+        },
+        "curiosity": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "number"},
+                "reason": {"type": "string"},
+                "improvement": {"type": "string"}
+            },
+            "required": ["score", "reason", "improvement"],
+            "additionalProperties": False
+        },
+        "clarity": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "number"},
+                "reason": {"type": "string"},
+                "improvement": {"type": "string"}
+            },
+            "required": ["score", "reason", "improvement"],
+            "additionalProperties": False
+        },
+        "retention": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "number"},
+                "reason": {"type": "string"},
+                "improvement": {"type": "string"}
+            },
+            "required": ["score", "reason", "improvement"],
+            "additionalProperties": False
+        },
+        "cta": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "number"},
+                "reason": {"type": "string"},
+                "improvement": {"type": "string"}
+            },
+            "required": ["score", "reason", "improvement"],
+            "additionalProperties": False
+        },
+        "overall": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "number"},
+                "reason": {"type": "string"},
+                "improvement": {"type": "string"}
+            },
+            "required": ["score", "reason", "improvement"],
+            "additionalProperties": False
+        }
+    },
+    "required": ["hook", "curiosity", "clarity", "retention", "cta", "overall"],
+    "additionalProperties": False
+}
 
 def print(*args, **kwargs):
     msg = " ".join(str(a) for a in args)
@@ -49,6 +117,7 @@ class CriticResult:
     retention: CategoryFeedback
     cta: CategoryFeedback
     overall: CategoryFeedback
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def _clean_json_text(text: str) -> str:
@@ -78,28 +147,6 @@ def _parse_category_feedback(data: Dict[str, Any], key: str, default_score: floa
 
 def run_script_critic(script: Script, settings: Settings) -> CriticResult:
     """Run the script critic to evaluate the generated Script."""
-    has_api_key = bool(
-        os.environ.get("LLM_API_KEY")
-        or os.environ.get("ANTHROPIC_API_KEY")
-        or getattr(settings, "llm_api_key", None)
-    )
-
-    if not has_api_key:
-        # Mock mode fallback (deterministic but realistic scores around 7.5 to 8.5)
-        # If it is the original script, return overall = 7.8 to trigger revision
-        # If it is the rewritten script (detected by title change), return overall = 8.8
-        is_rewritten = "MUST" in script.title or "immediately" in script.hook
-        overall_score = 8.8 if is_rewritten else 7.8
-        
-        return CriticResult(
-            hook=CategoryFeedback(score=overall_score, reason="Mock hook evaluation", improvement="Make it punchier"),
-            curiosity=CategoryFeedback(score=8.0, reason="Mock curiosity evaluation", improvement="Build anticipation"),
-            clarity=CategoryFeedback(score=8.5, reason="Mock clarity evaluation", improvement="Keep simple words"),
-            retention=CategoryFeedback(score=7.8, reason="Mock retention evaluation", improvement="Use visuals"),
-            cta=CategoryFeedback(score=8.0, reason="Mock cta evaluation", improvement="Make next steps clear"),
-            overall=CategoryFeedback(score=overall_score, reason="Mock overall evaluation", improvement="Improve hook and flow"),
-        )
-
     system_prompt = (
         "You are the Script Critic. Evaluate the provided video script and return EXACTLY a JSON object matching this schema:\n"
         "{\n"
@@ -122,22 +169,19 @@ def run_script_critic(script: Script, settings: Settings) -> CriticResult:
 
     user_prompt = f"Please evaluate this script:\n{script_json}"
 
+    provider_called_successfully = False
     try:
-        provider = get_provider(settings)
-        resp = provider.generate_text(prompt=user_prompt, system_prompt=system_prompt)
-        cleaned = _clean_json_text(resp)
-        data = json.loads(cleaned)
-
-        return CriticResult(
-            hook=_parse_category_feedback(data, "hook", 8.0),
-            curiosity=_parse_category_feedback(data, "curiosity", 8.0),
-            clarity=_parse_category_feedback(data, "clarity", 8.5),
-            retention=_parse_category_feedback(data, "retention", 8.0),
-            cta=_parse_category_feedback(data, "cta", 8.0),
-            overall=_parse_category_feedback(data, "overall", 8.1),
-        )
+        from clippilot.brain.env import has_api_key
+        if not has_api_key():
+            raise ValueError("No API key configured")
+        models = settings.critic_models
+        if not models:
+            models = [settings.critic_model] if settings.critic_model else ([settings.llm_model] if settings.llm_model else [])
+        provider = get_provider(settings, models=models)
+        resp = provider.generate_text(prompt=user_prompt, system_prompt=system_prompt, json_schema=CRICIC_SCHEMA if 'CRICIC_SCHEMA' in locals() else CRITIC_SCHEMA)
+        provider_called_successfully = True
     except Exception as e:
-        print(f"⚠️ Critic evaluation failed: {e}. Falling back to deterministic mock evaluation.")
+        print(f"⚠️ Critic evaluation API call failed: {e}. Falling back to deterministic mock evaluation.")
         is_rewritten = "MUST" in script.title or "immediately" in script.hook
         overall_score = 8.8 if is_rewritten else 7.8
         return CriticResult(
@@ -147,6 +191,99 @@ def run_script_critic(script: Script, settings: Settings) -> CriticResult:
             retention=CategoryFeedback(score=7.8, reason="Fallback retention", improvement="Use visuals"),
             cta=CategoryFeedback(score=8.0, reason="Fallback cta", improvement="Make next steps clear"),
             overall=CategoryFeedback(score=overall_score, reason="Fallback overall", improvement="Improve hook and flow"),
+            metadata={
+                "provider": "MockProvider",
+                "requested_model": "mock",
+                "actual_model": "mock",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency": 0.0,
+                "estimated_cost": 0.0,
+                "cost": 0.0
+            }
+        )
+
+    # Now parse JSON (no API retry/fallback if this fails)
+    try:
+        from clippilot.brain.provider import tolerant_json_loads
+        data = tolerant_json_loads(resp)
+        
+        last_usage = getattr(provider, "last_usage", {})
+        provider_model = getattr(provider, "model", "unknown")
+        requested_model = getattr(provider, "requested_model", provider_model)
+        meta_dict = {
+            "provider": provider.__class__.__name__,
+            "requested_model": requested_model,
+            "actual_model": provider_model,
+            "input_tokens": last_usage.get("input_tokens", 0),
+            "output_tokens": last_usage.get("output_tokens", 0),
+            "latency": last_usage.get("latency", 0.0),
+            "estimated_cost": last_usage.get("estimated_cost", 0.0),
+            "cost": last_usage.get("estimated_cost", 0.0)
+        }
+
+        return CriticResult(
+            hook=_parse_category_feedback(data, "hook", 8.0),
+            curiosity=_parse_category_feedback(data, "curiosity", 8.0),
+            clarity=_parse_category_feedback(data, "clarity", 8.5),
+            retention=_parse_category_feedback(data, "retention", 8.0),
+            cta=_parse_category_feedback(data, "cta", 8.0),
+            overall=_parse_category_feedback(data, "overall", 8.1),
+            metadata=meta_dict
+        )
+    except Exception as parse_err:
+        from clippilot.logger import get_logger
+        logger = get_logger("clippilot.pipeline")
+        
+        is_leakage = False
+        if resp:
+            from clippilot.brain.provider import detects_reasoning_leakage
+            is_leakage = detects_reasoning_leakage(resp)
+            
+        reason = "JSON validation failure"
+        if is_leakage:
+            reason = "Reasoning leakage"
+        elif "Missing key" in str(parse_err) or "invalid" in str(parse_err).lower() or isinstance(parse_err, (KeyError, AttributeError, TypeError)):
+            reason = "Schema validation failure"
+            
+        logger.error(f"Unable to repair malformed JSON. Using deterministic mock fallback. Failure Reason: {reason}. Error: {parse_err}")
+        from clippilot.brain.provider import save_failed_response
+        save_failed_response(
+            stage_name="critic",
+            raw_response=resp,
+            reason=reason,
+            provider=provider.__class__.__name__,
+            requested_model=getattr(provider, "requested_model", None),
+            actual_model=getattr(provider, "model", None),
+            correction_attempted=True,
+            repair_attempted=True,
+            schema_validation_status="failed" if reason == "Schema validation failure" else "not_applicable"
+        )
+        is_rewritten = "MUST" in script.title or "immediately" in script.hook
+        overall_score = 8.8 if is_rewritten else 7.8
+        
+        last_usage = getattr(provider, "last_usage", {})
+        provider_model = getattr(provider, "model", "unknown")
+        requested_model = getattr(provider, "requested_model", provider_model)
+        meta_dict = {
+            "provider": provider.__class__.__name__,
+            "requested_model": requested_model,
+            "actual_model": provider_model,
+            "input_tokens": last_usage.get("input_tokens", 0),
+            "output_tokens": last_usage.get("output_tokens", 0),
+            "latency": last_usage.get("latency", 0.0),
+            "estimated_cost": last_usage.get("estimated_cost", 0.0),
+            "cost": last_usage.get("estimated_cost", 0.0),
+            "fallback_flag": True
+        }
+        return CriticResult(
+            hook=CategoryFeedback(score=overall_score, reason="Fallback hook evaluation", improvement="Make it punchier"),
+            curiosity=CategoryFeedback(score=8.0, reason="Fallback curiosity", improvement="Build anticipation"),
+            clarity=CategoryFeedback(score=8.5, reason="Fallback clarity", improvement="Keep simple words"),
+            retention=CategoryFeedback(score=7.8, reason="Fallback retention", improvement="Use visuals"),
+            cta=CategoryFeedback(score=8.0, reason="Fallback cta", improvement="Make next steps clear"),
+            overall=CategoryFeedback(score=overall_score, reason="Fallback overall", improvement="Improve hook and flow"),
+            metadata=meta_dict
         )
 
 
@@ -177,36 +314,6 @@ def _improve_script_prompt(script: Script, feedback: CriticResult) -> str:
 
 def run_script_rewrite(script: Script, feedback: CriticResult, settings: Settings) -> Script:
     """Ask the provider to rewrite the script based on critic feedback."""
-    has_api_key = bool(
-        os.environ.get("LLM_API_KEY")
-        or os.environ.get("ANTHROPIC_API_KEY")
-        or getattr(settings, "llm_api_key", None)
-    )
-
-    if not has_api_key:
-        # Mock rewrite: return a slightly improved mock script
-        improved_title = script.title
-        if not improved_title.startswith("Why You MUST"):
-            stripped_title = improved_title[4:] if improved_title.startswith("Why ") else improved_title
-            improved_title = f"Why You MUST {stripped_title}"
-
-        return Script(
-            topic_num=script.topic_num,
-            title=improved_title,
-            hook=f"Wait, {script.hook.lower() if script.hook else ''}!",
-            niche_context=script.niche_context,
-            scenes=[
-                ScriptScene(
-                    narration=f"Yes, {script.title.lower()} is a major topic right now.",
-                    visual_desc=script.scenes[0].visual_desc if script.scenes else "Visual representing the main point."
-                ),
-                ScriptScene(
-                    narration=f"Here is what you need to do: keep track of your {script.niche_context}.",
-                    visual_desc=script.scenes[1].visual_desc if len(script.scenes) > 1 else "Takeaway graphic."
-                )
-            ]
-        )
-
     system_prompt = (
         "You are the autonomous Shorts Producer. Your job is to output exactly one improved script "
         "as a raw JSON object complying with this exact schema:\n"
@@ -223,19 +330,19 @@ def run_script_rewrite(script: Script, feedback: CriticResult, settings: Setting
 
     user_prompt = _improve_script_prompt(script, feedback)
 
+    provider_called_successfully = False
     try:
-        provider = get_provider(settings)
-        resp = provider.generate_text(prompt=user_prompt, system_prompt=system_prompt)
-        parsed = _validate_and_parse_json(resp)
-        return Script(
-            topic_num=script.topic_num,
-            title=parsed["title"],
-            hook=parsed["hook"],
-            niche_context=parsed["niche_context"],
-            scenes=[ScriptScene(narration=s["narration"], visual_desc=s["visual_desc"]) for s in parsed["scenes"]],
-        )
+        from clippilot.brain.env import has_api_key
+        if not has_api_key():
+            raise ValueError("No API key configured")
+        models = settings.critic_models
+        if not models:
+            models = [settings.critic_model] if settings.critic_model else ([settings.llm_model] if settings.llm_model else [])
+        provider = get_provider(settings, models=models)
+        resp = provider.generate_text(prompt=user_prompt, system_prompt=system_prompt, json_schema=SCRIPT_SCHEMA)
+        provider_called_successfully = True
     except Exception as e:
-        print(f"⚠️ Script rewrite failed: {e}. Falling back to deterministic mock rewrite.")
+        print(f"⚠️ Script rewrite API call failed: {e}. Falling back to deterministic mock rewrite.")
         improved_title = script.title
         if not improved_title.startswith("Why You MUST"):
             stripped_title = improved_title[4:] if improved_title.startswith("Why ") else improved_title
@@ -255,8 +362,145 @@ def run_script_rewrite(script: Script, feedback: CriticResult, settings: Setting
                     narration=f"Here is what you need to do: keep track of your {script.niche_context}.",
                     visual_desc=script.scenes[1].visual_desc if len(script.scenes) > 1 else "Takeaway graphic."
                 )
-            ]
+            ],
+            metadata={
+                "provider": "MockProvider",
+                "requested_model": "mock",
+                "actual_model": "mock",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "latency": 0.0,
+                "estimated_cost": 0.0,
+                "cost": 0.0
+            }
         )
+
+    # Now parse JSON (no API retry/fallback if this fails)
+    try:
+        parsed = _validate_and_parse_json(resp)
+        
+        last_usage = getattr(provider, "last_usage", {})
+        provider_model = getattr(provider, "model", "unknown")
+        requested_model = getattr(provider, "requested_model", provider_model)
+        meta_dict = {
+            "provider": provider.__class__.__name__,
+            "requested_model": requested_model,
+            "actual_model": provider_model,
+            "input_tokens": last_usage.get("input_tokens", 0),
+            "output_tokens": last_usage.get("output_tokens", 0),
+            "latency": last_usage.get("latency", 0.0),
+            "estimated_cost": last_usage.get("estimated_cost", 0.0),
+            "cost": last_usage.get("estimated_cost", 0.0)
+        }
+
+        return Script(
+            topic_num=script.topic_num,
+            title=parsed["title"],
+            hook=parsed["hook"],
+            niche_context=parsed["niche_context"],
+            scenes=[ScriptScene(narration=s["narration"], visual_desc=s["visual_desc"]) for s in parsed["scenes"]],
+            metadata=meta_dict
+        )
+    except Exception as parse_err:
+        from clippilot.logger import get_logger
+        logger = get_logger("clippilot.pipeline")
+        
+        is_leakage = False
+        if resp:
+            from clippilot.brain.provider import detects_reasoning_leakage
+            is_leakage = detects_reasoning_leakage(resp)
+            
+        reason = "JSON validation failure"
+        if is_leakage:
+            reason = "Reasoning leakage"
+        elif "Missing required key" in str(parse_err) or "must be a list" in str(parse_err) or "cannot be empty" in str(parse_err):
+            reason = "Schema validation failure"
+            
+        logger.error(f"Unable to repair malformed JSON. Using deterministic mock fallback. Failure Reason: {reason}. Error: {parse_err}")
+        from clippilot.brain.provider import save_failed_response
+        save_failed_response(
+            stage_name="critic",
+            raw_response=resp,
+            reason=reason,
+            provider=provider.__class__.__name__,
+            requested_model=getattr(provider, "requested_model", None),
+            actual_model=getattr(provider, "model", None),
+            correction_attempted=True,
+            repair_attempted=True
+        )
+        improved_title = script.title
+        if not improved_title.startswith("Why You MUST"):
+            stripped_title = improved_title[4:] if improved_title.startswith("Why ") else improved_title
+            improved_title = f"Why You MUST {stripped_title}"
+
+        last_usage = getattr(provider, "last_usage", {})
+        provider_model = getattr(provider, "model", "unknown")
+        requested_model = getattr(provider, "requested_model", provider_model)
+        meta_dict = {
+            "provider": provider.__class__.__name__,
+            "requested_model": requested_model,
+            "actual_model": provider_model,
+            "input_tokens": last_usage.get("input_tokens", 0),
+            "output_tokens": last_usage.get("output_tokens", 0),
+            "latency": last_usage.get("latency", 0.0),
+            "estimated_cost": last_usage.get("estimated_cost", 0.0),
+            "cost": last_usage.get("estimated_cost", 0.0),
+            "fallback_flag": True
+        }
+
+        return Script(
+            topic_num=script.topic_num,
+            title=improved_title,
+            hook=f"Wait, {script.hook.lower() if script.hook else ''}!",
+            niche_context=script.niche_context,
+            scenes=[
+                ScriptScene(
+                    narration=f"Yes, {script.title.lower()} is a major topic right now.",
+                    visual_desc=script.scenes[0].visual_desc if script.scenes else "Visual representing the main point."
+                ),
+                ScriptScene(
+                    narration=f"Here is what you need to do: keep track of your {script.niche_context}.",
+                    visual_desc=script.scenes[1].visual_desc if len(script.scenes) > 1 else "Takeaway graphic."
+                )
+            ],
+            metadata=meta_dict
+        )
+
+
+def _aggregate_usages(usages: list[dict[str, Any]]) -> dict[str, Any]:
+    agg = {
+        "provider": "MockProvider",
+        "requested_model": "mock",
+        "actual_model": "mock",
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "latency": 0.0,
+        "estimated_cost": 0.0,
+        "cost": 0.0
+    }
+    real_usages = [u for u in usages if u and u.get("provider") != "MockProvider"]
+    if real_usages:
+        agg["provider"] = real_usages[0].get("provider", "MockProvider")
+        agg["requested_model"] = real_usages[0].get("requested_model", "mock")
+        agg["actual_model"] = real_usages[0].get("actual_model", "mock")
+    elif usages:
+        agg["provider"] = usages[0].get("provider", "MockProvider")
+        agg["requested_model"] = usages[0].get("requested_model", "mock")
+        agg["actual_model"] = usages[0].get("actual_model", "mock")
+        
+    for u in usages:
+        if not u:
+            continue
+        agg["input_tokens"] += u.get("input_tokens", 0)
+        agg["output_tokens"] += u.get("output_tokens", 0)
+        agg["latency"] += u.get("latency", 0.0)
+        agg["estimated_cost"] += u.get("estimated_cost", 0.0)
+        agg["cost"] += u.get("estimated_cost", 0.0)
+        
+    agg["latency"] = round(agg["latency"], 4)
+    agg["estimated_cost"] = round(agg["estimated_cost"], 6)
+    agg["cost"] = round(agg["cost"], 6)
+    return agg
 
 
 def orchestrate_script_revision(
@@ -279,7 +523,9 @@ def orchestrate_script_revision(
     # If the score meets or exceeds the threshold, no rewrite needed
     if initial_score >= threshold:
         print("✔️ Script score satisfies threshold. Skipping revision.")
+        critic_usage = _aggregate_usages([initial_critique.metadata])
         initial_script.metadata.update({
+            "critic_usage": critic_usage,
             "initial_score": initial_score,
             "final_score": initial_score,
             "revision_count": 0,
@@ -319,7 +565,14 @@ def orchestrate_script_revision(
         chosen_critique = initial_critique
         chosen_score = initial_score
 
+    critic_usage = _aggregate_usages([
+        initial_critique.metadata,
+        rewritten_script.metadata,
+        final_critique.metadata
+    ])
+
     chosen_script.metadata.update({
+        "critic_usage": critic_usage,
         "title": chosen_script.title,
         "initial_score": initial_score,
         "final_score": chosen_score,

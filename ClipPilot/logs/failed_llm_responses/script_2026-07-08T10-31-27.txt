@@ -1,0 +1,12 @@
+Stage: script
+Requested Model: openai/gpt-oss-120b:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Provider: OpenRouterProvider
+Reason: JSON validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: not_applicable
+Timestamp: 2026-07-08 10:31:27
+
+Raw Response:
+{"title": "Why You MUST Stop Closing Credit Cards", "hook": "You just paid off your card — so you cut it up. Big mistake.", "niche_context": "Credit score mechanics: closing cards spikes utilization ratio and erases account age, silently crushing your score.", "scenes": [{"narration": "You just paid off your card — so you cut it up.", "visual_desc": "Extreme close-up: metal

@@ -75,10 +75,28 @@ def check_readiness(workspace_dir: Optional[Path] = None) -> dict[str, Any]:
     # 8. API Keys status
     from .brain import env as benv
     benv.load_dotenv()
-    has_key = benv.has_api_key()
 
     from .config import Settings
     settings = Settings.load()
+    
+    anthropic_key_set = bool(os.environ.get("ANTHROPIC_API_KEY") or settings.llm_api_key)
+    openai_key_set = bool(os.environ.get("OPENAI_API_KEY"))
+    openrouter_key_set = bool(os.environ.get("OPENROUTER_API_KEY"))
+    has_any_llm_key = anthropic_key_set or openai_key_set or openrouter_key_set
+
+    # Resolve active provider and models
+    try:
+        from .brain.provider import get_provider
+        provider = get_provider(settings)
+        current_provider_name = provider.__class__.__name__
+    except Exception:
+        current_provider_name = "mock (fallback)"
+
+    script_m = settings.script_model or settings.llm_model or "google/gemini-2.5-flash:free"
+    critic_m = settings.critic_model or settings.llm_model or "google/gemini-2.5-flash:free"
+    vision_m = settings.vision_model or settings.brain_model or settings.llm_model or "google/gemini-2.5-flash:free"
+    asset_m = settings.asset_model or settings.llm_model or "google/gemini-2.5-flash:free"
+
     pexels_key_set = bool(settings.pexels_api_key)
     pixabay_key_set = bool(settings.pixabay_api_key)
     unsplash_key_set = bool(settings.unsplash_api_key)
@@ -120,7 +138,12 @@ def check_readiness(workspace_dir: Optional[Path] = None) -> dict[str, Any]:
         _check("faster-whisper", whisper_ok, "installed" if whisper_ok else "pip install faster-whisper", "transcription + word-timed karaoke captions"),
         _check("TTS (Chatterbox / edge-tts)", tts_ok, "ready" if tts_ok else "no engine (Chatterbox venv or edge-tts)", "Section B/C narration"),
         _check("yt-dlp", ytdlp_ok, "installed" if ytdlp_ok else "pip install yt-dlp", "download a source video from a URL for Section-A clipping"),
-        _check("Anthropic API key", has_key, "set" if has_key else "add ANTHROPIC_API_KEY to .env", "Claude vision understanding, smart highlight picks, script/metadata (deterministic fallback otherwise)"),
+        _check("OpenRouter configured", openrouter_key_set, "set" if openrouter_key_set else "add OPENROUTER_API_KEY to .env", "Primary production LLM provider for script/critic/asset/QA tasks"),
+        _check("Current provider", has_any_llm_key, current_provider_name, "Active LLM provider interface"),
+        _check("Script model", has_any_llm_key, script_m, "Model for generating script content"),
+        _check("Critic model", has_any_llm_key, critic_m, "Model for reviewing and grading scripts"),
+        _check("Vision model", has_any_llm_key, vision_m, "Model for running image frame layout audits"),
+        _check("Asset model", has_any_llm_key, asset_m, "Model for generating planned visual b-roll assets"),
         _check("Pexels API key", pexels_key_set, "set" if pexels_key_set else "not configured", "Pexels stock video downloads"),
         _check("Pixabay API key", pixabay_key_set, "set" if pixabay_key_set else "not configured", "Pixabay stock video downloads"),
         _check("Unsplash API key", unsplash_key_set, "set" if unsplash_key_set else "not configured", "Unsplash stock image downloads"),
@@ -137,7 +160,7 @@ def check_readiness(workspace_dir: Optional[Path] = None) -> dict[str, Any]:
         "clip_sectionA": ffmpeg_ok,
         "captions": ffmpeg_ok and whisper_ok,
         "generate_sectionB": ffmpeg_ok and tts_ok,
-        "brain": has_key,
+        "brain": has_any_llm_key,
         "publish_free": ffmpeg_ok and yt,
         "publish_paid": ffmpeg_ok and up,
         "can_publish": ffmpeg_ok and (yt or up),
@@ -154,8 +177,8 @@ def check_readiness(workspace_dir: Optional[Path] = None) -> dict[str, Any]:
         steps.append("Set up FREE publishing: create a Google OAuth *Desktop* client (enable YouTube Data API v3), put YOUTUBE_CLIENT_ID/SECRET in .env, then run `python -m clippilot.publish.youtube_auth --write-env` (docs/09 step 7).")
     elif yt_partial and not yt:
         steps.append("Finish YouTube auth: run `python -m clippilot.publish.youtube_auth --write-env` to obtain YOUTUBE_REFRESH_TOKEN.")
-    if not has_key:
-        steps.append("Optional: add ANTHROPIC_API_KEY to .env for human-like understanding + smart clip picks (works without it via deterministic fallback).")
+    if not has_any_llm_key:
+        steps.append("Optional: add OPENROUTER_API_KEY to .env for human-like understanding + smart clip picks (works without it via deterministic fallback).")
     if not whisper_ok:
         steps.append("Install captions support: pip install faster-whisper.")
 
@@ -176,7 +199,7 @@ def format_report(report: dict[str, Any]) -> str:
               f"  clip Section A : {'yes' if r['clip_sectionA'] else 'no'}",
               f"  captions       : {'yes' if r['captions'] else 'no'}",
               f"  generate Sec B : {'yes' if r['generate_sectionB'] else 'no'}",
-              f"  Claude brain   : {'yes' if r['brain'] else 'no (deterministic fallback)'}",
+              f"  LLM brain      : {'yes' if r['brain'] else 'no (deterministic fallback)'}",
               f"  publish (free) : {'yes' if r['publish_free'] else 'no'}",
               f"  publish (paid) : {'yes' if r['publish_paid'] else 'no'}"]
               
