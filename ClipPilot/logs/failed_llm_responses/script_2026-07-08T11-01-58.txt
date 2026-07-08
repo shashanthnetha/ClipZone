@@ -1,0 +1,12 @@
+Stage: script
+Requested Model: openai/gpt-oss-120b:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Provider: OpenRouterProvider
+Reason: Schema validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: failed
+Timestamp: 2026-07-08 11:01:58
+
+Raw Response:
+{"hook": {"score": 4.0, "reason": "The hook 'Stop Closing Cards' is a direct command but lacks intrigue, emotional appeal, or a specific benefit to grab attention immediately.", "improvement": "Reframe as a curiosity-driven statement or surprising fact, e.g., 'Closing this credit card could cost you $500+ in lost rewards and drop your score 50 points.'"}, "curiosity": {"score": 2.0, "reason": "The script simply repeats the same directive twice without introducing an open loop, surprising statistic, or story that makes the viewer want to keep watching.", "improvement": "Add a specific, counter-intuitive insight (e.g., 'Banks actually profit when you close old cards') or a brief anecdote about someone who regretted closing a card."}, "clarity": {"score": 6.0, "reason": "The core message 'don't close credit cards' is unmistakable, but the script provides zero explanation of why (credit utilization, age of accounts, rewards loss), leaving the viewer uninformed.", "improvement": "Insert 1-2 concise, jargon-free reasons (e.g., 'Closing a card raises your utilization ratio instantly' and 'You lose the account's positive payment history')."}, "retention": {"score": 3.0, "reason": "Only two scenes, both repeating the same phrase with generic visuals; no progression, variety, or escalating value to hold attention beyond a few seconds.", "improvement": "Structure into 3-4 distinct beats: hook → shocking fact → visual proof (credit score simulator) → personal tip → CTA."}, "cta": {"score": 0.0, "reason": "There is no call to action whatsoever — no request to like, subscribe, comment, click a link, or download a resource.", "impro

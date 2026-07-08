@@ -1,0 +1,12 @@
+Stage: script
+Requested Model: qwen/qwen3-next-80b-a3b-instruct:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Provider: OpenRouterProvider
+Reason: Schema validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: failed
+Timestamp: 2026-07-08 11:03:59
+
+Raw Response:
+{"scenes": [{"scene_number": 1, "background": "dark_finance", "stock_video_queries": ["credit card close up", "person holding credit card", "credit card transaction"], "image_queries": ["credit card with scissors", "credit card cut in half", "stop sign on credit card"], "icon_queries": ["credit-card", "x-circle", "alert-triangle"], "chart_type": "credit utilization ratio", "overlay_text": "Why You MUST Stop Closing Credit Cards", "animations": ["fade-in", "slide-up"], "transitions": ["swipe-left"], "fallback_assets": [{"asset_type": "image", "provider": "mock", "search_query": "credit card", "local_path": "assets/fallback_credit_card.png", "priority": 1, "required": true}]}, {"scene_number": 2, "background": "dark_finance", "stock_video_queries": ["old credit card glowing", "credit card with green border", "credit card history"], "image_queries": ["vintage credit card", "credit card with green glow", "long standing credit account"], "icon_queries": ["credit-card", "check-circle", "clock"], "chart_type": "credit age impact", "overlay_text": "Stop Closing Cards - Keep Old Accounts Open", "animations": ["fade-in", "

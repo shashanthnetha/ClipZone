@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from clippilot.brain.pipeline_orchestrator import PipelineState, Topic, VariationRecord
+from clippilot.brain.creative_models import CreativeBlueprint
 from clippilot.brain.provider import get_provider
 
 
@@ -117,6 +118,7 @@ def generate_script(
     workspace_dir: Path,
     retries: int = 3,
     fallback_to_mock: bool = True,
+    blueprint: Optional[CreativeBlueprint] = None,
 ) -> Script:
     """Generate a structured script using LLM prompts based on current topic/rules.
 
@@ -206,24 +208,41 @@ def generate_script(
         "Do NOT output markdown code fences, do not output any surrounding text. Return ONLY raw JSON."
     )
 
-    user_prompt = (
-        f"Generate a validated vertical video short script for:\n"
-        f"- Topic Num: {topic.num}\n"
-        f"- Topic Title Proposal: {topic.title}\n"
-        f"- Niche/CPM: {topic.niche}\n"
-        f"- True Mechanism Angle: {topic.angle}\n"
-        f"- Brand Guardrails: {topic.guardrail}\n\n"
-        f"Apply this variation config:\n"
-        f"- Format: {variation.fmt}\n"
-        f"- Skin Style: {variation.skin}\n"
-        f"- Voice/Length: {variation.voice} ({variation.len})\n"
-        f"- Topic Cluster: {variation.cluster}\n"
-        f"- Hook Type: {variation.hook}\n\n"
-        f"Obey these self-learned optimization rules:\n"
-        f"{state.learned_rules}\n\n"
-        f"Steal these technique catalog patterns from the competitor playbook:\n"
-        f"{playbook_content[:3000]}\n"  # Truncated to avoid token bloat
-    )
+    if blueprint:
+        from clippilot.brain.prompt_builder import build_blueprint_instructions
+        blueprint_instructions = build_blueprint_instructions(blueprint)
+        user_prompt = (
+            f"Generate a validated vertical video short script for:\n"
+            f"- Topic Num: {topic.num}\n"
+            f"- Topic Title Proposal: {topic.title}\n"
+            f"- Niche/CPM: {topic.niche}\n"
+            f"- True Mechanism Angle: {topic.angle}\n"
+            f"- Brand Guardrails: {topic.guardrail}\n\n"
+            f"{blueprint_instructions}\n\n"
+            f"Obey these self-learned optimization rules:\n"
+            f"{state.learned_rules}\n\n"
+            f"Steal these technique catalog patterns from the competitor playbook:\n"
+            f"{playbook_content[:3000]}\n"  # Truncated to avoid token bloat
+        )
+    else:
+        user_prompt = (
+            f"Generate a validated vertical video short script for:\n"
+            f"- Topic Num: {topic.num}\n"
+            f"- Topic Title Proposal: {topic.title}\n"
+            f"- Niche/CPM: {topic.niche}\n"
+            f"- True Mechanism Angle: {topic.angle}\n"
+            f"- Brand Guardrails: {topic.guardrail}\n\n"
+            f"Apply this variation config:\n"
+            f"- Format: {variation.fmt}\n"
+            f"- Skin Style: {variation.skin}\n"
+            f"- Voice/Length: {variation.voice} ({variation.len})\n"
+            f"- Topic Cluster: {variation.cluster}\n"
+            f"- Hook Type: {variation.hook}\n\n"
+            f"Obey these self-learned optimization rules:\n"
+            f"{state.learned_rules}\n\n"
+            f"Steal these technique catalog patterns from the competitor playbook:\n"
+            f"{playbook_content[:3000]}\n"  # Truncated to avoid token bloat
+        )
 
     # 3. Request LLM with retries
     try:

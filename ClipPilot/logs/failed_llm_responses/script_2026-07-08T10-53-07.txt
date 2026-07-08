@@ -1,0 +1,17 @@
+Stage: script
+Requested Model: <MagicMock name='get_provider().requested_model' id='4449440432'>
+Actual Model: <MagicMock name='get_provider().model' id='4449440768'>
+Provider: MagicMock
+Reason: Schema validation failure
+Repair Attempted: True
+Correction Attempted: True
+Schema Validation Status: failed
+Timestamp: 2026-07-08 10:53:07
+
+Raw Response:
+{
+  "title": "Blueprint Guided Video",
+  "hook": "Check this!",
+  "niche_context": "testing",
+  "scenes": []
+}

@@ -1,0 +1,12 @@
+Stage: script
+Requested Model: openai/gpt-oss-120b:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Provider: OpenRouterProvider
+Reason: Schema validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: failed
+Timestamp: 2026-07-08 11:01:24
+
+Raw Response:
+{"title": "Why You MUST Stop Closing Credit Cards", "hook": "Stop closing credit cards — you're secretly destroying your score!", "niche_context": "Credit niche retains 76.1% avg AVP vs 49.7% science; algorithm favors curiosity-first, jargon-free hooks. Target young adults building credit history who mistakenly believe closing unused cards helps. Frame as universal curiosity: 'what happens to YOUR score when you close a card?'", "scenes": [{"narration": "Closing a card slashes your total limit — utilization spikes instantly.", "visual_desc": "Cold-open extreme close-up: scissors snapping a credit card in half. Split-screen left shows 'BEFORE: $10K limit / $2K balance = 20% utilization' in bold yellow-white uppercase captions with thin black outlines; right shows 'AFTER: $5K limit / $2K balance = 40% utilization' flashing red. Key noun 'UTILIZATION' highlighted in gold #FFD23F. Cinematic overlay: animated percentage counter morphing 20%→40%. Professional documentary lighting, editorial graphic style."}, {"narration": "Average account age drops — 15% of your score vanishes overnight.", "visual_desc": "Split-screen transforms: left calendar pages flip rapidly showing account age '8 YEARS' burning away to '2 YEARS'. Right: FICO score meter plummets 750→680 with dramatic cinematic shake. Caption '

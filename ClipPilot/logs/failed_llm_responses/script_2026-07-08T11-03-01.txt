@@ -1,0 +1,12 @@
+Stage: script
+Requested Model: openai/gpt-oss-120b:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Provider: OpenRouterProvider
+Reason: Schema validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: failed
+Timestamp: 2026-07-08 11:03:01
+
+Raw Response:
+{"hook": {"score": 8.5, "reason": "The hook uses a specific, alarming number (50 points) and urgent language that immediately signals high stakes, making viewers want to know why.", "improvement": "Add a personalization element (e.g., \"Your score could drop 50 points\n—\nfind out how to prevent it\" ) or a quick teaser of the solution to deepen the curiosity gap."}, "curiosity": {"score": 8.0, "reason": "The script flips a common misconception (closing cards cleans up credit) and reveals two concrete mechanisms (utilization spike, history loss) that sustain interest.", "improvement": "Introduce a surprising statistic or a brief anecdote (e.g., \"One viewer saw a 70‑point drop after closing just one card\\n—\nsee what happened\\n\nafter they kept it open\" ) to heighten the curiosity payoff."}, "clarity": {"score": 9.0, "reason": "Each scene explains one clear concept with matching visuals: utilization gauge, timeline animation, auto‑pay setup, and final score meter. Jargon is minimal and defined in context.", "improvement": "Briefly define \"credit utilization\" in the first scene (e.g., \"the ratio of balance to limit\nt) for absolute beginners."}, "retention": {"score": 8.5, "reason": "Four concise scenes with a logical problem‑solution arc, dynamic visual changes (split screen, timeline, phone screen, confetti), and a satisfying payoff keep viewers watching to the end.", "improvement": "Insert a micro‑hook between scenes (e.g., \"But there’s one more hidden factor…\n\" ) to prevent drop‑off at scene transitions."}, "cta": {"score": 6.0, "reason": "The ending line \"Keep it open, watch your score grow\" is advice, not a channel‑level call to action. No subscribe, link, or next‑step prompt is present.", "improvement": "Add an explicit CTA: \"Hit subscribe for weekly credit hacks, and download our free ‘Keep‑It‑Open’ checklist in the description.\" "}, "overall": {"score": 8.0, "reason": "Strong educational hook, clear explanations, good visual storytelling, and a satisfying conclusion. The main weakness is a soft channel CTA and missed opportunities for deeper curiosity spikes.", "improvement": "Strengthen the CTA, add a brief definition for beginners, and sprinkle a teaser or statistic between scenes
