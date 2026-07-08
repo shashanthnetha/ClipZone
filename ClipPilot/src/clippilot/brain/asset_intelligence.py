@@ -15,6 +15,7 @@ from clippilot.brain.asset_models import VideoAssetPlan, SceneAssetPlan, AssetRe
 from clippilot.config import Settings
 from clippilot.brain.provider import get_provider
 from clippilot.logger import get_logger
+from clippilot.brain.creative_models import CreativeBlueprint, SceneBlueprint
 
 logger = get_logger("clippilot.assets")
 
@@ -84,7 +85,9 @@ class AssetIntelligenceEngine:
         self,
         script: Script,
         render_tree: Any,  # ScenePlan or RenderTree
-        settings: Optional[Settings] = None
+        settings: Optional[Settings] = None,
+        creative_blueprint: Optional[CreativeBlueprint] = None,
+        scene_blueprints: Optional[list[SceneBlueprint]] = None
     ) -> VideoAssetPlan:
         """Determines background, stock footage queries, icons, charts, and transitions for every scene."""
         if settings is None:
@@ -101,7 +104,7 @@ class AssetIntelligenceEngine:
         )
 
         if not has_api_key:
-            return self._build_deterministic_plan(script, render_tree)
+            return self._build_deterministic_plan(script, render_tree, creative_blueprint, scene_blueprints)
 
         # 1. Prepare Prompt
         system_prompt = (
@@ -139,7 +142,18 @@ class AssetIntelligenceEngine:
         for i, s in enumerate(script.scenes):
             user_prompt += f"Scene {i+1}: Narration: {s.narration} | Visual Description: {s.visual_desc}\n"
 
-        # 2. Call LLM
+        if scene_blueprints:
+            user_prompt += "\nUse the following detailed Scene Blueprints as the single source of truth for planning assets:\n"
+            for bp in scene_blueprints:
+                user_prompt += (
+                    f"Scene {bp.scene_number}:\n"
+                    f"- Retention Stage: {bp.retention_stage}\n"
+                    f"- Scene Goal: {bp.scene_goal}\n"
+                    f"- Visual Intent: {bp.visual_intent}\n"
+                    f"- Visual Priority: {bp.visual_priority}\n"
+                    f"Please generate the 'stock_video_queries', 'image_queries', and 'icon_queries' strictly derived from 'Visual Intent' (Flow: Scene Goal -> Visual Intent -> Search Queries).\n"
+                )
+
         # 2. Call LLM
         provider_called_successfully = False
         try:
@@ -154,9 +168,9 @@ class AssetIntelligenceEngine:
             provider_called_successfully = True
         except Exception as e:
             print(f"⚠️ Asset Intelligence Provider call failed: {e}. Falling back to deterministic plan.")
-            return self._build_deterministic_plan(script, render_tree)
+            return self._build_deterministic_plan(script, render_tree, creative_blueprint, scene_blueprints)
 
-        # 3. Parse JSON (only if provider succeeded, do not catch inside the same retry/loop)
+        # 3. Parse JSON (only if provider succeeded)
         try:
             from clippilot.brain.provider import tolerant_json_loads
             parsed = tolerant_json_loads(raw_response)
@@ -249,11 +263,17 @@ class AssetIntelligenceEngine:
                 "cost": last_usage.get("estimated_cost", 0.0),
                 "fallback_flag": True
             }
-            plan = self._build_deterministic_plan(script, render_tree)
+            plan = self._build_deterministic_plan(script, render_tree, creative_blueprint, scene_blueprints)
             plan.metadata = meta_dict
             return plan
 
-    def _build_deterministic_plan(self, script: Script, render_tree: Any) -> VideoAssetPlan:
+    def _build_deterministic_plan(
+        self,
+        script: Script,
+        render_tree: Any,
+        creative_blueprint: Optional[CreativeBlueprint] = None,
+        scene_blueprints: Optional[list[SceneBlueprint]] = None
+    ) -> VideoAssetPlan:
         """Deterministically extracts background style, stock/icon queries, and motion elements."""
         scenes_plan = []
 
@@ -268,51 +288,74 @@ class AssetIntelligenceEngine:
             scene_num = idx + 1
             narr_lower = scene.narration.lower()
 
-            # 1. Deterministic background styling
-            if "paper" in bg_id or "warm" in bg_id:
-                bg = "warm_paper"
-            elif "neon" in bg_id or "night" in bg_id:
-                bg = "neon_vignette"
-            elif "blueprint" in bg_id:
-                bg = "blueprint_grid"
-            else:
+            if scene_blueprints and idx < len(scene_blueprints):
+                scene_blueprint = scene_blueprints[idx]
+                
+                # Derive Queries Directly from visual_intent/search_queries of SceneBlueprint
+                stock_queries = list(scene_blueprint.search_queries)
                 bg = bg_id
-
-            # 2. Deterministic stock video queries
-            stock_queries = []
-            if "credit" in narr_lower or "card" in narr_lower:
-                stock_queries.append("credit card payment")
-            elif "phone" in narr_lower or "bill" in narr_lower:
-                stock_queries.append("smartphone bill payment")
-            elif "free trial" in narr_lower or "subscription" in narr_lower:
-                stock_queries.append("calendar free trial subscription")
-            elif "close" in narr_lower or "closing" in narr_lower:
-                stock_queries.append("closing bank account")
-            elif "score" in narr_lower or "rating" in narr_lower:
-                stock_queries.append("credit score rating")
+                bg_lower = scene_blueprint.visual_style.lower()
+                if "paper" in bg_lower or "warm" in bg_lower:
+                    bg = "warm_paper"
+                elif "neon" in bg_lower or "night" in bg_lower:
+                    bg = "neon_vignette"
+                elif "blueprint" in bg_lower:
+                    bg = "blueprint_grid"
+                elif "minimal" in bg_lower:
+                    bg = "near_black"
+                
+                icon_queries = [scene_blueprint.fallback_icon.replace(".png", "")]
+                chart_type = scene_blueprint.primary_visual
+                animations = [scene_blueprint.animation_style]
+                transitions = [scene_blueprint.transition]
             else:
-                stock_queries.append("financial analytics graph")
+                # 1. Deterministic background styling
+                if "paper" in bg_id or "warm" in bg_id:
+                    bg = "warm_paper"
+                elif "neon" in bg_id or "night" in bg_id:
+                    bg = "neon_vignette"
+                elif "blueprint" in bg_id:
+                    bg = "blueprint_grid"
+                else:
+                    bg = bg_id
 
-            # 3. Deterministic image queries
+                # 2. Deterministic stock video queries
+                stock_queries = []
+                if "credit" in narr_lower or "card" in narr_lower:
+                    stock_queries.append("credit card payment")
+                elif "phone" in narr_lower or "bill" in narr_lower:
+                    stock_queries.append("smartphone bill payment")
+                elif "free trial" in narr_lower or "subscription" in narr_lower:
+                    stock_queries.append("calendar free trial subscription")
+                elif "close" in narr_lower or "closing" in narr_lower:
+                    stock_queries.append("closing bank account")
+                elif "score" in narr_lower or "rating" in narr_lower:
+                    stock_queries.append("credit score rating")
+                else:
+                    stock_queries.append("financial analytics graph")
+
+                # 3. Deterministic icon queries
+                icon_queries = []
+                if "credit" in narr_lower or "card" in narr_lower:
+                    icon_queries.append("credit-card")
+                if "bank" in narr_lower or "account" in narr_lower:
+                    icon_queries.append("bank")
+                if any(w in narr_lower for w in ["warning", "hurt", "fail", "lose", "charging"]):
+                    icon_queries.append("warning")
+                if not icon_queries:
+                    icon_queries = ["trending-up", "dollar-sign"]
+
+                # 4. Deterministic chart type
+                chart_type = ""
+                if "score" in narr_lower:
+                    chart_type = "credit score"
+                elif any(w in narr_lower for w in ["trend", "analytics", "rise", "drop"]):
+                    chart_type = "line chart"
+                    
+                animations = ["fade-in"]
+                transitions = ["swipe"]
+
             image_queries = [f"{q} close up" for q in stock_queries]
-
-            # 4. Deterministic icon queries
-            icon_queries = []
-            if "credit" in narr_lower or "card" in narr_lower:
-                icon_queries.append("credit-card")
-            if "bank" in narr_lower or "account" in narr_lower:
-                icon_queries.append("bank")
-            if any(w in narr_lower for w in ["warning", "hurt", "fail", "lose", "charging"]):
-                icon_queries.append("warning")
-            if not icon_queries:
-                icon_queries = ["trending-up", "dollar-sign"]
-
-            # 5. Deterministic chart type
-            chart_type = ""
-            if "score" in narr_lower:
-                chart_type = "credit score"
-            elif any(w in narr_lower for w in ["trend", "analytics", "rise", "drop"]):
-                chart_type = "line chart"
 
             # 6. Fallback assets mapping
             fallback_refs = [
@@ -336,8 +379,8 @@ class AssetIntelligenceEngine:
                     icon_queries=icon_queries,
                     chart_type=chart_type,
                     overlay_text=scene.narration[:30] + "..." if len(scene.narration) > 30 else scene.narration,
-                    animations=["fade-in"],
-                    transitions=["swipe"],
+                    animations=animations,
+                    transitions=transitions,
                     fallback_assets=fallback_refs
                 )
             )

@@ -1,0 +1,88 @@
+Stage: script
+Requested Model: qwen/qwen3-next-80b-a3b-instruct:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Provider: OpenRouterProvider
+Reason: Schema validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: failed
+Timestamp: 2026-07-08 12:11:15
+
+Raw Response:
+We need to output JSON with scenes array. Each scene must have fields: scene_number, background, stock_video_queries, image_queries, icon_queries, chart_type, overlay_text, animations, transitions, fallback_assets.
+
+We have 5 scenes from script. But blueprints only for first three scenes. However we must produce asset plan for all 5 scenes. Use script visual descriptions to derive queries. Also follow blueprint for first three scenes: they specify visual intent and priority. For scenes 4 and 5, we can infer.
+
+We must strictly derive queries from Visual Intent for first three scenes. For scene1: Visual Intent: "Frustrated person encountering a financial or tech roadblock". Visual Priority: stock_video. So stock_video_queries should reflect that. image_queries and icon_queries also derived from visual intent.
+
+Scene2: Visual Intent: "Complex data analytical chart showing mechanism details". Visual Priority: stock_image. So image_queries primary, stock_video_queries maybe empty or minimal. icon_queries maybe chart icons.
+
+Scene3: Visual Intent: "Clean graphic with call to action overlay text". Visual Priority: text_only. So likely no stock video or images, just overlay text. But we still need arrays (maybe empty). icon_queries maybe "subscribe", "arrow". chart_type maybe none.
+
+For scenes 4 and 5, we can derive from script visual descriptions.
+
+We also need background per scene: maybe "dark_finance" or similar. Use generic.
+
+Chart_type: for scene2 maybe "utilization chart". Scene3 maybe none. Scene4 maybe "credit mix icons". Scene5 maybe none.
+
+Overlay_text: from narration maybe.
+
+Animations and transitions: can include generic.
+
+Fallback_assets: at least one per scene.
+
+We must output raw JSON only.
+
+Let's craft.
+
+Scene1:
+- scene_number:1
+- background:"dark_finance"
+- stock_video_queries: ["frustrated person financial roadblock", "person cutting credit card", "credit score dropping"]
+- image_queries: ["frustrated person with credit card", "scissors over credit card"]
+- icon_queries: ["credit-card", "warning", "scissors"]
+- chart_type: null or "credit score meter"
+- overlay_text: "Stop closing credit cards – it’s secretly destroying your credit score!"
+- animations: ["fade-in", "shake"]
+- transitions: ["swipe"]
+- fallback_assets: [ {asset_type:"video", provider:"mock", search_query:"frustrated person credit card", local_path:"assets/fallback1.mp4", priority:1, required:true} ]
+
+Scene2:
+- scene_number:2
+- background:"dark_finance"
+- stock_video_queries: [] (since priority stock_image)
+- image_queries: ["credit utilization chart split screen", "low vs high credit utilization graph"]
+- icon_queries: ["chart", "percentage", "credit-card"]
+- chart_type: "utilization comparison"
+- overlay_text: "Closing a card spikes your credit utilization"
+- animations: ["slide-up", "fade-in"]
+- transitions: ["crossfade"]
+- fallback_assets: [ {asset_type:"image", provider:"mock", search_query:"credit utilization chart", local_path:"assets/fallback2.png", priority:1, required:true} ]
+
+Scene3:
+- scene_number:3
+- background:"dark_finance"
+- stock_video_queries: []
+- image_queries: []
+- icon_queries: ["subscribe", "bell", "arrow-up"]
+- chart_type: null
+- overlay_text: "Keep your oldest account open to protect your score"
+- animations: ["pulse", "fade-in"]
+- transitions: ["fade"]
+- fallback_assets: [ {asset_type:"image", provider:"mock", search_query:"subscribe button", local_path:"assets/fallback3.png", priority:1, required:true} ]
+
+Scene4 (from script):
+Visual Description: Icons of revolving credit, installment loans, mortgage; revolving credit icon disappears.
+- background:"dark_finance"
+- stock_video_queries: ["credit mix icons animation"]
+- image_queries: ["credit mix icons", "revolving credit icon", "installment loan icon", "mortgage icon"]
+- icon_queries: ["credit-card", "home", "car", "warning"]
+- chart_type: "credit mix diagram"
+- overlay_text: "You lose credit mix diversity when you close a card"
+- animations: ["fade-out", "slide-left"]
+- transitions: ["wipe"]
+- fallback_assets: [ {asset_type:"image", provider:"mock", search_query:"credit mix icons", local_path:"assets/fallback4.png", priority:1, required:true} ]
+
+Scene5:
+Visual Description: Checklist animation: keep card open, small recurring charge, pay on time; then subscribe button pulses.
+- background:"dark_finance

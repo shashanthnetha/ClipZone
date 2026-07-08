@@ -629,15 +629,15 @@ class AnthropicProvider:
                         from clippilot.config import Settings
                         settings = Settings.load()
                         correction_attempted = False
-                        if is_leakage and getattr(settings, "enable_reasoning_correction", True):
-                            logger.warning(f"⚠️ Reasoning leakage detected in response. Attempting automatic correction request...")
+                        if getattr(settings, "enable_reasoning_correction", True):
+                            logger.warning(f"⚠️ JSON parsing or schema validation failed. Attempting automatic correction request to same model '{model}'...")
                             correction_attempted = True
                             pipeline_diagnostics["correction_requests"] += 1
                             try:
                                 # Append assistant turn and correction prompt
                                 correction_messages = messages + [
                                     {"role": "assistant", "content": text},
-                                    {"role": "user", "content": "You already generated the correct answer.\n\nReturn ONLY the final JSON object.\n\nDo not include explanations.\n\nDo not include markdown.\n\nDo not include analysis.\n\nReturn valid JSON only."}
+                                    {"role": "user", "content": "You already generated the correct answer.\n\nReturn ONLY valid JSON.\n\nDo not include markdown.\n\nDo not include explanations.\n\nDo not include reasoning.\n\nReturn ONLY the JSON."}
                                 ]
                                 kwargs_correction = {
                                     "model": model,
@@ -701,9 +701,10 @@ class AnthropicProvider:
                                     repair_attempted=True,
                                     schema_validation_status="failed" if is_schema_err or "schema validation" in str(parse_err).lower() else "not_applicable"
                                 )
-                                raise corr_err if isinstance(corr_err, JSONParsingError) else parse_err
+                                # Halt candidate search by raising JSONParsingError directly
+                                raise JSONParsingError(f"JSON validation failed completely on correction: {corr_err}")
                         else:
-                            # Save failed response since correction is disabled or not a leakage
+                            # Save failed response since correction is disabled
                             is_schema_err = "schema validation" in str(parse_err).lower()
                             save_failed_response(
                                 stage_name="script" if "script" in prompt.lower() or "scene" in prompt.lower() else "critic",
@@ -716,7 +717,7 @@ class AnthropicProvider:
                                 repair_attempted=True,
                                 schema_validation_status="failed" if is_schema_err else "not_applicable"
                             )
-                            raise parse_err
+                            raise JSONParsingError(f"JSON parsing/schema validation failed: {parse_err}")
  
                 logger.info(
                     f"✔️ LLM call succeeded:\n"
@@ -1153,14 +1154,14 @@ class OpenAIProvider:
                     from clippilot.config import Settings
                     settings = Settings.load()
                     correction_attempted = False
-                    if is_leakage and getattr(settings, "enable_reasoning_correction", True):
-                        logger.warning(f"⚠️ Reasoning leakage detected in response. Attempting automatic correction request...")
+                    if getattr(settings, "enable_reasoning_correction", True):
+                        logger.warning(f"⚠️ JSON parsing or schema validation failed. Attempting automatic correction request to same model '{model}'...")
                         correction_attempted = True
                         pipeline_diagnostics["correction_requests"] += 1
                         try:
                             correction_messages = messages + [
                                 {"role": "assistant", "content": text},
-                                {"role": "user", "content": "You already generated the correct answer.\n\nReturn ONLY the final JSON object.\n\nDo not include explanations.\n\nDo not include markdown.\n\nDo not include analysis.\n\nReturn valid JSON only."}
+                                {"role": "user", "content": "You already generated the correct answer.\n\nReturn ONLY valid JSON.\n\nDo not include markdown.\n\nDo not include explanations.\n\nDo not include reasoning.\n\nReturn ONLY the JSON."}
                             ]
                             kwargs_correction = {
                                 "model": model,
@@ -1218,7 +1219,8 @@ class OpenAIProvider:
                                 repair_attempted=True,
                                 schema_validation_status="failed" if is_schema_err or "schema validation" in str(parse_err).lower() else "not_applicable"
                             )
-                            raise corr_err if isinstance(corr_err, JSONParsingError) else parse_err
+                            # Halt candidate search by raising JSONParsingError directly
+                            raise JSONParsingError(f"JSON validation failed completely on correction: {corr_err}")
                     else:
                         is_schema_err = "schema validation" in str(parse_err).lower()
                         save_failed_response(
@@ -1232,7 +1234,7 @@ class OpenAIProvider:
                             repair_attempted=True,
                             schema_validation_status="failed" if is_schema_err else "not_applicable"
                         )
-                        raise parse_err
+                        raise JSONParsingError(f"JSON parsing/schema validation failed: {parse_err}")
  
             logger.info(
                 f"✔️ LLM call succeeded:\n"

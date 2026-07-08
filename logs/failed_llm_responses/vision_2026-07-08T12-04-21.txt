@@ -1,0 +1,12 @@
+Stage: vision
+Requested Model: model-a
+Actual Model: model-a
+Provider: OpenAIProvider
+Reason: JSON validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: not_applicable
+Timestamp: 2026-07-08 12:04:21
+
+Raw Response:
+This is completely unrecoverable junk.

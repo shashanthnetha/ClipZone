@@ -211,6 +211,31 @@ def execute_production_pipeline(
     print(json.dumps(blueprint_dict, indent=2))
     report["creative_blueprint"] = blueprint_dict
 
+    # Stage 2B: Scene Blueprint Generation
+    from clippilot.brain.director_rules import make_scene_blueprints
+    from clippilot.brain.scene_quality import calculate_scene_quality_score, repair_scene_blueprint
+    
+    scene_blueprints = make_scene_blueprints(blueprint)
+    
+    # Calculate quality score and repair once
+    for i, s_bp in enumerate(scene_blueprints):
+        prev_bp = scene_blueprints[i - 1] if i > 0 else None
+        score = calculate_scene_quality_score(s_bp, blueprint.story_framework.name, len(scene_blueprints), prev_scene=prev_bp)
+        s_bp.scene_quality_score = score
+        if score < 80.0:
+            logger.info(f"Scene {s_bp.scene_number} quality score ({score}) below threshold (80.0). Performing one deterministic repair...")
+            repaired_bp = repair_scene_blueprint(s_bp, blueprint.story_framework.name, len(scene_blueprints), prev_scene=prev_bp)
+            new_score = calculate_scene_quality_score(repaired_bp, blueprint.story_framework.name, len(scene_blueprints), prev_scene=prev_bp)
+            repaired_bp.scene_quality_score = new_score
+            if new_score < 80.0:
+                logger.warning(f"⚠️ Scene {repaired_bp.scene_number} quality score ({new_score}) still below 80.0 after repair. Accepting and moving forward.")
+            scene_blueprints[i] = repaired_bp
+            
+    print(f"✔️ Scene Blueprints generated:")
+    scene_blueprints_dicts = [s.to_dict() for s in scene_blueprints]
+    print(json.dumps(scene_blueprints_dicts, indent=2))
+    report["scene_blueprints"] = scene_blueprints_dicts
+
     print("\n🚀 [STAGE 4] Script Generation...")
     start = time.time()
     script = generate_script(state, topic, variation, workspace_dir, blueprint=blueprint)
@@ -225,7 +250,7 @@ def execute_production_pipeline(
 
     print("\n🚀 [STAGE 5] Initial Scene Planning...")
     start = time.time()
-    scene_plan = plan_scenes(script, variation)
+    scene_plan = plan_scenes(script, variation, scene_blueprints=scene_blueprints)
     timings["plan_scenes"] = round(time.time() - start, 4)
     print(f"✔️ Scene plan blueprints ready.")
 
@@ -233,7 +258,7 @@ def execute_production_pipeline(
     start_assets = time.time()
     from clippilot.brain.asset_intelligence import AssetIntelligenceEngine
     asset_engine = AssetIntelligenceEngine()
-    asset_plan = asset_engine.build_asset_plan(script, scene_plan, settings)
+    asset_plan = asset_engine.build_asset_plan(script, scene_plan, settings, creative_blueprint=blueprint, scene_blueprints=scene_blueprints)
     timings["asset_intelligence"] = round(time.time() - start_assets, 4)
     report["video_asset_plan"] = asset_plan.to_dict()
     print("✔️ Asset Plan created.")

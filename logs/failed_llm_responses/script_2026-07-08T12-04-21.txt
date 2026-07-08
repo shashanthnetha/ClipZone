@@ -1,0 +1,12 @@
+Stage: script
+Requested Model: nemotron-test
+Actual Model: nemotron-test
+Provider: MagicMock
+Reason: JSON validation failure
+Repair Attempted: True
+Correction Attempted: True
+Schema Validation Status: not_applicable
+Timestamp: 2026-07-08 12:04:21
+
+Raw Response:
+This is NOT valid JSON.

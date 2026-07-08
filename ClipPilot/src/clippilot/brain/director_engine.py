@@ -76,6 +76,13 @@ def make_creative_blueprint(
     visual_style, caption_style, style_reason = rules.get_visual_and_caption_style(skin_str)
     decision_reasoning["visual_style"] = style_reason
     decision_reasoning["caption_style"] = style_reason
+
+    # Visual Language settings
+    transition_style = rules.get_transition_style(skin_str)
+    animation_style = rules.get_animation_style(skin_str)
+    camera_language = rules.get_camera_language(skin_str)
+    emphasis_color = rules.get_emphasis_color(skin_str)
+    visual_pacing = "fast" if pacing == "Fast/Dynamic" else "steady"
     
     # 9. Primary Goal
     primary_goal = "Educate the audience on topic mechanisms and maximize viewer retention rate."
@@ -107,5 +114,10 @@ def make_creative_blueprint(
         visual_style=visual_style,
         target_scene_count=target_scene_count,
         primary_goal=primary_goal,
+        transition_style=transition_style,
+        animation_style=animation_style,
+        camera_language=camera_language,
+        emphasis_color=emphasis_color,
+        visual_pacing=visual_pacing,
         metadata=metadata
     )

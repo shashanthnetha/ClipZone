@@ -1,0 +1,11 @@
+Stage: script
+Requested Model: openai/gpt-oss-120b:free
+Actual Model: openai/gpt-oss-120b:free
+Provider: OpenRouterProvider
+Reason: JSON validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: not_applicable
+Timestamp: 2026-07-08 12:05:50
+
+Raw Response:

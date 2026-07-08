@@ -71,6 +71,8 @@ class SubtitleLayer(RenderLayer):
     timings: list[tuple[float, float]] = field(default_factory=list)
     font_family: FontAsset = field(default_factory=FontAsset)
     font_size: int = 72
+    emphasis_color: str = ""
+    caption_style: str = ""
 
 
 @dataclass
@@ -197,6 +199,8 @@ def build_render_graph(composition: Composition, registry: Optional[AssetRegistr
                 timings=list(sub.timings),
                 font_family=font_asset,  # Reference resolved font Asset object
                 font_size=sub.style.get("fontSize", 72),
+                emphasis_color=sub.style.get("emphasisColor", "#fca311"),
+                caption_style=sub.style.get("captionStyle", ""),
             )
 
         # 4. Images (mapping asset references to visual layers)

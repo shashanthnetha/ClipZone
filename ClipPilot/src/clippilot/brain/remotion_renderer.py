@@ -184,9 +184,12 @@ def render_to_remotion(tree: SceneComponentTree) -> RemotionRenderOutput:
             elif isinstance(child, SubtitleComponent):
                 words_json = json.dumps(child.words)
                 timings_json = json.dumps(child.timings)
+                emp_color = child.emphasis_color or "#fca311"
+                cap_style = child.caption_style or ""
                 scene_lines.append(
                     f"      <Subtitle words={{{words_json}}} timings={{{timings_json}}} style={layout_str} "
-                    f"animations={{{anim_str}}} transitions={{{trans_str}}} />"
+                    f"animations={{{anim_str}}} transitions={{{trans_str}}} "
+                    f"emphasisColor='{emp_color}' captionStyle='{cap_style}' />"
                 )
 
         # Audio tracks rendering (Narration and SFX)

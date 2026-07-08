@@ -7,10 +7,11 @@ time-indexed, and asset-bound visual/audio scene plans.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from clippilot.brain.pipeline_orchestrator import VariationRecord
 from clippilot.brain.script_generator import Script
+from clippilot.brain.creative_models import SceneBlueprint
 
 
 @dataclass
@@ -27,6 +28,8 @@ class ScenePlanScene:
     sfx_ids: list[str] = field(default_factory=list)
     background_id: str = ""
     chart_id: str = ""
+    camera_language: str = ""
+    caption_behavior: str = ""
 
 
 @dataclass
@@ -40,9 +43,16 @@ class ScenePlan:
     voice_id: str
     scenes: list[ScenePlanScene] = field(default_factory=list)
     total_duration_seconds: float = 0.0
+    caption_style: str = ""
+    emphasis_color: str = ""
+    visual_style: str = ""
 
 
-def plan_scenes(script: Script, variation: VariationRecord) -> ScenePlan:
+def plan_scenes(
+    script: Script,
+    variation: VariationRecord,
+    scene_blueprints: Optional[list[SceneBlueprint]] = None
+) -> ScenePlan:
     """Deterministically maps a script and its variation configs into a ScenePlan."""
     # 1. Niche skin configuration mappings
     skin_id = variation.skin
@@ -93,11 +103,52 @@ def plan_scenes(script: Script, variation: VariationRecord) -> ScenePlan:
         scene_idx = idx + 1
         narration = scene.narration
 
-        # Estimate duration: average 2.5 words per second, minimum 1.5 seconds
+        # If Scene Blueprint is provided, override duration/transitions/animations/etc
+        if scene_blueprints and idx < len(scene_blueprints):
+            scene_blueprint = scene_blueprints[idx]
+            duration = scene_blueprint.duration
+            
+            # Map visual style representation to background_id key
+            bg_lower = scene_blueprint.visual_style.lower()
+            if "paper" in bg_lower or "warm" in bg_lower:
+                bg = "warm_paper"
+            elif "neon" in bg_lower or "night" in bg_lower:
+                bg = "neon_vignette"
+            elif "blueprint" in bg_lower:
+                bg = "blueprint_grid"
+            elif "minimal" in bg_lower:
+                bg = "near_black"
+            else:
+                bg = background_id
+                
+            anims = [scene_blueprint.animation_style]
+            trans = [scene_blueprint.transition]
+            camera_lang = scene_blueprint.camera_language
+            caption_beh = scene_blueprint.caption_behavior
+            assets = [f"asset_{skin_id.lower()}_{scene_idx}"]
+            
+            # If visual priority matches list or split columns
+            if format_id == "F3" or scene_blueprint.visual_priority == "motion_graphic":
+                assets.append(f"list_item_{scene_idx}")
+            elif format_id == "F5":
+                assets.append("split_column")
+        else:
+            # Fallback to estimating duration: average 2.5 words per second, minimum 1.5 seconds
+            words = narration.split()
+            duration = max(1.5, len(words) / 2.5)
+            bg = background_id
+            anims = animations
+            trans = transitions
+            camera_lang = ""
+            caption_beh = ""
+            assets = [f"asset_{skin_id.lower()}_{scene_idx}"]
+            if format_id == "F3":
+                assets.append(f"list_item_{scene_idx}")
+            elif format_id == "F5":
+                assets.append("split_column")
+
         words = narration.split()
         num_words = len(words)
-        duration = max(1.5, num_words / 2.5)
-
         # Estimate subtitle word-by-word timings
         timings: list[tuple[float, float]] = []
         if num_words > 0:
@@ -115,13 +166,6 @@ def plan_scenes(script: Script, variation: VariationRecord) -> ScenePlan:
         else:
             sfx = ["pop"]
 
-        # Determine visual asset identifiers based on skin/format
-        assets = [f"asset_{skin_id.lower()}_{scene_idx}"]
-        if format_id == "F3":  # Listicle
-            assets.append(f"list_item_{scene_idx}")
-        elif format_id == "F5":  # Comparison
-            assets.append("split_column")
-
         planned_scenes.append(
             ScenePlanScene(
                 scene_index=scene_idx,
@@ -130,14 +174,27 @@ def plan_scenes(script: Script, variation: VariationRecord) -> ScenePlan:
                 subtitle_words=words,
                 subtitle_timings=timings,
                 asset_ids=assets,
-                animation_ids=animations,
-                transition_ids=transitions,
+                animation_ids=anims,
+                transition_ids=trans,
                 sfx_ids=sfx,
-                background_id=background_id,
+                background_id=bg,
                 chart_id=chart_id,
+                camera_language=camera_lang,
+                caption_behavior=caption_beh
             )
         )
         total_duration += duration
+
+    # Extract global properties if blueprints are available
+    caption_style = ""
+    emphasis_color = ""
+    visual_style_str = ""
+    if scene_blueprints and len(scene_blueprints) > 0:
+        # Resolve from variation skin settings dynamically using rules
+        from clippilot.brain.director_rules import get_visual_and_caption_style, get_emphasis_color
+        _, caption_style, _ = get_visual_and_caption_style(skin_id)
+        emphasis_color = get_emphasis_color(skin_id)
+        visual_style_str = bg_map.get(skin_id, "dark_radial")
 
     return ScenePlan(
         topic_num=script.topic_num,
@@ -148,4 +205,7 @@ def plan_scenes(script: Script, variation: VariationRecord) -> ScenePlan:
         voice_id=variation.voice,
         scenes=planned_scenes,
         total_duration_seconds=round(total_duration, 2),
+        caption_style=caption_style,
+        emphasis_color=emphasis_color,
+        visual_style=visual_style_str
     )

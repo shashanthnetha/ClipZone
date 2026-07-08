@@ -1,0 +1,12 @@
+Stage: script
+Requested Model: qwen/qwen3-next-80b-a3b-instruct:free
+Actual Model: nvidia/nemotron-3-ultra-550b-a55b:free
+Provider: OpenRouterProvider
+Reason: Schema validation failure
+Repair Attempted: True
+Correction Attempted: False
+Schema Validation Status: failed
+Timestamp: 2026-07-08 11:43:50
+
+Raw Response:
+{"scenes": [{"scene_number": 1, "background": "dark_finance", "stock_video_queries": ["person cutting credit card", "credit score meter dropping"], "image_queries": ["credit card cut", "credit score meter"], "icon_queries": ["credit-card", "warning", "chart-down"], "chart_type": "credit score meter", "overlay_text": "Closing a card hurts your score", "animations": ["fade-in", "split-screen"], "transitions": ["swipe"], "fallback_assets": [{"asset_type": "image", "provider": "mock", "search_query": "credit card", "local_path": "assets/fallback.png", "priority": 1, "required": true}]}, {"scene_number": 2, "background": "utilization_chart", "stock_video_queries": ["pie chart credit utilization"], "image_queries": ["pie chart before after utilization"], "icon_queries": ["pie-chart", "alert", "percentage"], "chart_type": "utilization ratio", "overlay_text": "Utilization spikes after closure", "animations": ["fade-in", "grow"], "transitions": ["fade"], "fallback_assets": [{"asset_type": "image", "provider": "mock", "search_query": "pie chart", "local_path": "assets/fallback.png", "priority": 1, "required": true}]}, {"scene_number": 3, "background": "timeline_accounts", "stock_video_queries": ["timeline aging credit accounts"], "image_queries": ["credit account timeline"], "icon_queries": ["calendar

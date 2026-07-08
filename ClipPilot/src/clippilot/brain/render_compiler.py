@@ -44,6 +44,8 @@ class SubtitleComponent(ComponentBase):
     words: list[str] = field(default_factory=list)
     timings: list[tuple[float, float]] = field(default_factory=list)
     font_size: int = 72
+    emphasis_color: str = ""
+    caption_style: str = ""
 
 
 @dataclass
@@ -152,6 +154,8 @@ def compile_render_graph(graph: RenderGraph) -> SceneComponentTree:
                 words=list(scene.subtitle.words),
                 timings=list(scene.subtitle.timings),
                 font_size=scene.subtitle.font_size,
+                emphasis_color=scene.subtitle.emphasis_color,
+                caption_style=scene.subtitle.caption_style,
             )
 
         # 3. Chart Component

@@ -49,7 +49,7 @@ export const Image: React.FC<{ src: string } & ComponentProps> = ({ src, style }
   );
 };
 
-export const Subtitle: React.FC<{ words: string[]; timings: number[][] } & ComponentProps> = ({ words, timings, style }) => {
+export const Subtitle: React.FC<{ words: string[]; timings: number[][]; emphasisColor?: string; captionStyle?: string } & ComponentProps> = ({ words, timings, emphasisColor = '#fca311', captionStyle, style }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const currentTime = frame / fps;
@@ -82,14 +82,15 @@ export const Subtitle: React.FC<{ words: string[]; timings: number[][] } & Compo
         <span
           key={idx}
           style={{
-            color: idx === activeIndex ? '#fca311' : '#ffffff',
+            color: idx === activeIndex ? emphasisColor : '#ffffff',
             textShadow: idx === activeIndex
-              ? '0 0 20px rgba(252, 163, 17, 0.6), 0 4px 10px rgba(0,0,0,0.5)'
+              ? `0 0 20px ${emphasisColor}, 0 4px 10px rgba(0,0,0,0.5)`
               : '0 4px 10px rgba(0,0,0,0.5)',
             marginRight: '12px',
             transform: idx === activeIndex ? 'scale(1.15)' : 'scale(1.0)',
             transition: 'transform 0.1s ease-out, color 0.1s ease-out',
             display: 'inline-block',
+            textTransform: captionStyle?.toLowerCase().includes("uppercase") ? "uppercase" : "none",
           }}
         >
           {w}

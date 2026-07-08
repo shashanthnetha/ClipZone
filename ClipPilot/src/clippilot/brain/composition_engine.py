@@ -114,6 +114,11 @@ def compose_video(scene_plan: ScenePlan, width: int = 1080, height: int = 1920, 
             "color": "#FFFFFF",
             "textShadow": "0px 4px 10px rgba(0,0,0,0.5)",
         }
+        if getattr(scene_plan, "emphasis_color", None):
+            sub_style["emphasisColor"] = scene_plan.emphasis_color
+        if getattr(scene_plan, "caption_style", None):
+            sub_style["captionStyle"] = scene_plan.caption_style
+
         sub_layer = SubtitleLayer(
             words=list(scene.subtitle_words),
             timings=list(scene.subtitle_timings),
